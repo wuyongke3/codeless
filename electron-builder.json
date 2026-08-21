@@ -1,0 +1,64 @@
+{
+    "$schema":  "./node_modules/app-builder-lib/scheme.json",
+    "appId":  "com.codeless.local",
+    "asar":  true,
+    "productName":  "Codeless",
+    "copyright":  "Copyright (c) 2026 Codeless",
+    "directories":  {
+                        "buildResources":  "build",
+                        "output":  "release/${version}"
+                    },
+    "files":  [
+                  "dist/**/*",
+                  "dist-electron/**/*"
+              ],
+    "mac":  {
+                "category":  "public.app-category.utilities",
+                "icon":  "build/icons/icon.icns",
+                "hardenedRuntime":  true,
+                "gatekeeperAssess":  false,
+                "entitlements":  "build/entitlements.mac.plist",
+                "entitlementsInherit":  "build/entitlements.mac.plist",
+                "target":  [
+                               "dmg",
+                               "zip",
+                               "tar.gz"
+                           ],
+                "artifactName":  "${productName}-mac-${arch}-${version}.${ext}"
+            },
+    "win":  {
+                "icon":  "build/icons/icon.ico",
+                "target":  [
+                               "nsis",
+                               "portable",
+                               "zip",
+                               "tar.gz"
+                           ],
+                "artifactName":  "${productName}-windows-${arch}-${version}.${ext}"
+            },
+    "nsis":  {
+                 "oneClick":  false,
+                 "perMachine":  false,
+                 "artifactName":  "${productName}-windows-${arch}-${version}-setup.${ext}",
+                 "allowToChangeInstallationDirectory":  true,
+                 "deleteAppDataOnUninstall":  false
+             },
+    "portable":  {
+                     "artifactName":  "${productName}-windows-${arch}-${version}-portable.${ext}"
+                 },
+    "linux":  {
+                  "category":  "Utility",
+                  "maintainer":  "Codeless",
+                  "vendor":  "Codeless",
+                  "executableName":  "codeless",
+                  "icon":  "build/icons/1024x1024.png",
+                  "target":  [
+                                 "AppImage",
+                                 "deb",
+                                 "rpm",
+                                 "zip",
+                                 "tar.gz"
+                             ],
+                  "artifactName":  "${productName}-linux-${arch}-${version}.${ext}"
+              }
+}

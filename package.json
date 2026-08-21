@@ -1,0 +1,51 @@
+{
+    "name":  "codeless",
+    "version":  "0.1.0",
+    "main":  "dist-electron/main/index.js",
+    "description":  "Codeless — local-first rapid prototyping tool powered by Electron, Vue and SQLite.",
+    "author":  "Codeless",
+    "license":  "MIT",
+    "private":  true,
+    "keywords":  [
+                     "codeless",
+                     "low-code",
+                     "electron",
+                     "sqlite",
+                     "vue3",
+                     "local-first"
+                 ],
+    "type":  "module",
+    "scripts":  {
+                    "dev":  "vite",
+                    "typecheck":  "vue-tsc --noEmit",
+                    "build:check":  "vue-tsc --noEmit",
+                    "build:vite":  "vite build",
+                    "build":  "node scripts/build.mjs",
+                    "build:win":  "node scripts/build.mjs --win",
+                    "build:win:x64":  "node scripts/build.mjs --win --x64",
+                    "build:win:ia32":  "node scripts/build.mjs --win --ia32",
+                    "build:win:arm64":  "node scripts/build.mjs --win --arm64",
+                    "build:win:all":  "node scripts/build.mjs --win --x64 --ia32 --arm64",
+                    "build:mac":  "node scripts/build.mjs --mac",
+                    "build:mac:x64":  "node scripts/build.mjs --mac --x64",
+                    "build:mac:arm64":  "node scripts/build.mjs --mac --arm64",
+                    "build:mac:all":  "node scripts/build.mjs --mac --x64 --arm64",
+                    "build:linux":  "node scripts/build.mjs --linux",
+                    "build:linux:x64":  "node scripts/build.mjs --linux --x64",
+                    "build:linux:arm64":  "node scripts/build.mjs --linux --arm64",
+                    "build:linux:all":  "node scripts/build.mjs --linux --x64 --arm64",
+                    "preview":  "vite preview"
+                },
+    "devDependencies":  {
+                            "@vitejs/plugin-vue":  "^6.0.7",
+                            "electron":  "^42.1.0",
+                            "electron-builder":  "^26.8.1",
+                            "png2icons":  "^2.0.1",
+                            "typescript":  "^6.0.3",
+                            "vite":  "^8.0.16",
+                            "vite-plugin-electron":  "^1.0.1",
+                            "vite-plugin-electron-renderer":  "^1.0.0",
+                            "vue":  "^3.5.35",
+                            "vue-tsc":  "^3.3.3"
+                        }
+}

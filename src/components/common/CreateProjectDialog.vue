@@ -1,0 +1,12 @@
+<script setup lang="ts">
+import { reactive } from 'vue'
+import AppIcon from '../AppIcon.vue'
+
+type AppState = Record<string, any>
+const props = defineProps<{ ui: AppState }>()
+const state = reactive(props.ui)
+</script>
+
+<template>
+    <Transition name="fade"><div v-if="state.showCreateModal" class="modal-backdrop" @click.self="state.showCreateModal = false"><div class="dialog create-dialog"><header><div><span><AppIcon name="sparkle" :size="20" /></span><div><h3>创建新应用</h3><p>选择一个起点，几分钟内完成你的应用。</p></div></div><button @click="state.showCreateModal = false"><AppIcon name="close" :size="18" /></button></header><div class="dialog-body"><label><span>应用名称 <i>*</i></span><input id="project-name" v-model="state.createForm.name" placeholder="例如：供应商管理系统" @keydown.enter="state.createProject" /></label><label><span>应用描述</span><textarea v-model="state.createForm.description" rows="2" placeholder="简单描述这个应用解决的问题"></textarea></label><label><span>业务分类</span><select v-model="state.createForm.category"><option>业务应用</option><option>客户运营</option><option>订单管理</option><option>服务支持</option><option>内部工具</option></select></label><div class="template-picker"><span>选择模板</span><div><button :class="{ active: state.createForm.template === 'dashboard' }" @click="state.createForm.template = 'dashboard'"><i class="template-preview dashboard"><b></b><span></span><span></span><span></span><em></em></i><strong>数据看板</strong><small>指标与数据表格</small></button><button :class="{ active: state.createForm.template === 'form' }" @click="state.createForm.template = 'form'"><i class="template-preview form"><b></b><span></span><span></span><em></em></i><strong>信息表单</strong><small>收集和提交数据</small></button><button :class="{ active: state.createForm.template === 'blank' }" @click="state.createForm.template = 'blank'"><i class="template-preview blank"><AppIcon name="plus" :size="20" /></i><strong>空白画布</strong><small>完全自由搭建</small></button></div></div></div><footer><span><AppIcon name="lock" :size="14" />创建后自动保存到本地 SQLite</span><div><button class="ghost-button" @click="state.showCreateModal = false">取消</button><button class="primary-button" @click="state.createProject">创建并开始设计<AppIcon name="chevron-right" :size="15" /></button></div></footer></div></div></Transition>
+</template>
