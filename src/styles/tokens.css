@@ -1,0 +1,46 @@
+:root {
+  /* 品牌色 */
+  --purple: #665cf6;
+  --purple-dark: #5549ea;
+  --purple-light: #eeecff;
+
+  /* 语义色 */
+  --green: #20b486;
+  --orange: #f59e0b;
+  --red: #e35568;
+  --blue: #3698f5;
+
+  /* 中性色 */
+  --ink: #171a2b;
+  --ink-secondary: #22263a;
+  --muted: #74798c;
+  --muted-light: #969aaa;
+  --line: #e8e9f0;
+  --line-light: #f0f0f4;
+  --bg: #f5f6fa;
+  --bg-sidebar: #111321;
+  --white: #ffffff;
+
+  /* 间距 */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+
+  /* 圆角 */
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 13px;
+  --radius-xl: 18px;
+
+  /* 阴影 */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, .04);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, .06);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, .10);
+
+  /* 字体 */
+  --font-sans: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}

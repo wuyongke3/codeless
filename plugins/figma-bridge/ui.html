@@ -1,0 +1,78 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; img-src data:;" />
+  <title>Codeless Figma Local Bridge</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; padding: 18px; background: var(--figma-color-bg, #fff); color: var(--figma-color-text, #222); }
+    h1 { font-size: 17px; margin: 0 0 6px; }
+    p { margin: 4px 0 12px; color: var(--figma-color-text-secondary, #667085); font-size: 12px; line-height: 1.5; }
+    textarea { width: 100%; height: 430px; box-sizing: border-box; resize: vertical; border: 1px solid var(--figma-color-border, #d0d5dd); border-radius: 8px; padding: 10px; font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--figma-color-bg-secondary, #f8f9fb); color: inherit; }
+    .row { display: flex; gap: 8px; margin-top: 12px; }
+    button { border: 0; border-radius: 7px; padding: 8px 12px; cursor: pointer; background: #665cf6; color: white; font-weight: 600; }
+    button.secondary { background: var(--figma-color-bg-secondary, #e9ebf0); color: inherit; }
+    #status { min-height: 18px; margin-top: 8px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Codeless Figma Local Bridge</h1>
+  <p>仅读取当前选区并生成本地 codeless-design v1 JSON；不访问网络、不读取 .fig 私有文件。</p>
+  <textarea id="output" spellcheck="false" aria-label="设计交换 JSON"></textarea>
+  <div class="row">
+    <button id="refresh">读取当前选区</button>
+    <button id="copy" class="secondary">复制 JSON</button>
+    <button id="download" class="secondary">下载 JSON</button>
+    <button id="close" class="secondary">关闭</button>
+  </div>
+  <div id="status"></div>
+  <script>
+    const output = document.getElementById('output');
+    const status = document.getElementById('status');
+    let latest = null;
+    function setStatus(text, isError) {
+      status.textContent = text || '';
+      status.style.color = isError ? '#d92d20' : '';
+    }
+    function requestSelection() {
+      parent.postMessage({ pluginMessage: { type: 'export-selection' } }, '*');
+      setStatus('正在读取当前选区…');
+    }
+    document.getElementById('refresh').onclick = requestSelection;
+    document.getElementById('copy').onclick = async () => {
+      if (!output.value) return setStatus('没有可复制的 JSON', true);
+      try {
+        await navigator.clipboard.writeText(output.value);
+        setStatus('JSON 已复制到剪贴板');
+      } catch (_) {
+        output.focus(); output.select(); document.execCommand('copy');
+        setStatus('JSON 已复制到剪贴板');
+      }
+    };
+    document.getElementById('download').onclick = () => {
+      if (!output.value) return setStatus('没有可下载的 JSON', true);
+      const blob = new Blob([output.value + '\n'], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'figma-selection.codeless-design.json';
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setStatus('JSON 已下载到本机');
+    };
+    document.getElementById('close').onclick = () => parent.postMessage({ pluginMessage: { type: 'close' } }, '*');
+    onmessage = event => {
+      const message = event.data && event.data.pluginMessage;
+      if (!message) return;
+      if (message.type === 'bridge-error') return setStatus(message.message || '读取失败', true);
+      if (message.type === 'design-document') {
+        latest = message.document;
+        output.value = JSON.stringify(latest, null, 2);
+        setStatus(`已读取 ${latest.nodes.length} 个顶层节点，可复制或下载`);
+      }
+    };
+    requestSelection();
+  </script>
+</body>
+</html>

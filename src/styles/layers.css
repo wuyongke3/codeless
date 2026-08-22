@@ -1,0 +1,53 @@
+/* 页面图层与服务组件 */
+.pages-panel { min-height: 0; flex: 1; overflow: auto; padding: 13px 10px 20px; }
+.page-list-head, .layers-head { display:flex; align-items:center; justify-content:space-between; padding: 0 4px 8px; color:#8b8f9f; font-size:8px; }
+.page-list-head button, .layers-head button { background:transparent; color:#777c8e; }
+.page-item { cursor:pointer; }
+.page-item .page-menu { display:flex; gap:3px; opacity:.35; }
+.page-item:hover .page-menu { opacity:1; }
+.page-item .page-menu button { background:transparent; color:inherit; padding:2px; }
+.layers-panel { margin-top:18px; border-top:1px solid #ececf1; padding-top:13px; }
+.layer-list { display:flex; flex-direction:column; gap:2px; }
+.layer-item { display:flex; align-items:center; gap:6px; min-height:31px; padding:4px 6px; border-radius:7px; color:#6f7485; cursor:grab; user-select:none; }
+.layer-item:hover { background:#f7f7fb; color:#4d5265; }
+.layer-item.active { background:#efeeff; color:#5d53df; }
+.layer-item:active { cursor:grabbing; }
+.layer-item.dragging { opacity:.45; }
+.layer-item .layer-icon { width:22px; height:22px; display:grid; place-items:center; border-radius:5px; background:#f5f4ff; color:var(--purple); flex:0 0 auto; }
+.layer-item strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; font-size:8px; font-weight:600; }
+.layer-item small { color:#a0a4b2; font-size:7px; }
+
+.layer-item { position:relative; }
+.layer-item.drop-before::before,
+.layer-item.drop-after::after { content:""; position:absolute; left:4px; right:4px; height:2px; border-radius:2px; background:var(--purple); pointer-events:none; }
+.layer-item.drop-before::before { top:-2px; }
+.layer-item.drop-after::after { bottom:-2px; }
+.layer-item.drop-inside { background:#f0efff; box-shadow:inset 0 0 0 1px #8c84f0; }
+.layer-item.locked { cursor:not-allowed; opacity:.72; }
+
+/* Pixso/Figma-style canvas context menu. It is viewport anchored so it does
+   not get clipped by the scrollable canvas or either side panel. */
+.canvas-context-menu{position:fixed;z-index:2000;width:232px;max-height:calc(100vh - 16px);overflow:auto;padding:6px;border:1px solid #e1e2ea;border-radius:11px;background:#fff;color:#53586a;box-shadow:0 18px 45px #25263c2e,0 2px 6px #25263c12;transform-origin:top left;}
+.context-menu-heading{display:flex;align-items:center;gap:8px;padding:7px 9px 8px;border-bottom:1px solid #f0f0f4;}
+.context-menu-heading span{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#f2f1ff;color:var(--purple);font-size:7px;font-weight:700;}
+.context-menu-heading strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#464b5e;font-size:9px;font-weight:650;}
+.context-menu-item{display:flex;align-items:center;gap:9px;width:100%;min-height:31px;padding:0 8px;border-radius:7px;background:transparent;color:#606577;text-align:left;font-size:9px;transition:background .14s ease,color .14s ease,transform .14s ease;}
+.context-menu-item:hover:not(:disabled),.context-menu-item:focus-visible{background:#f1f0ff;color:#554be1;outline:0;}
+.context-menu-item:active:not(:disabled){transform:scale(.985);}
+.context-menu-item:disabled{color:#b5b7c2;cursor:not-allowed;}
+.context-menu-item .app-icon{color:#85899a;}
+.context-menu-item:hover:not(:disabled) .app-icon,.context-menu-item:focus-visible .app-icon{color:currentColor;}
+.context-menu-item span{min-width:0;flex:1;}
+.context-menu-item kbd{padding:2px 4px;border:1px solid #e9e9ef;border-radius:4px;background:#fafafd;color:#a2a5b1;font-size:7px;font-family:inherit;}
+.context-menu-separator{height:1px;margin:5px 4px;background:#efeff3;}
+.context-menu-label{padding:5px 8px 3px;color:#a0a3b0;font-size:7px;font-weight:650;letter-spacing:.25px;}
+.context-menu-enter-active,.context-menu-leave-active{transition:opacity .14s ease,transform .14s ease;}
+.context-menu-enter-from,.context-menu-leave-to{opacity:0;transform:scale(.96) translateY(-4px);}
+
+/* P0-06: keep large layer trees bounded by a fixed row viewport. */
+.layer-list-viewport { max-height: min(46vh, 420px); overflow: auto; contain: strict; scrollbar-gutter: stable; }
+.layer-list-viewport .layer-virtual-spacer { position: relative; min-height: 1px; }
+.layer-list-viewport .layer-virtual-window { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+.layer-list-viewport .layer-virtual-window > .layer-tree-node { height: 31px; margin-bottom: 2px; }
+.layer-list-viewport .layer-virtual-window .layer-item { height: 31px; min-height: 31px; box-sizing: border-box; }
+.layer-list-viewport:not(.is-virtualized) { max-height: min(46vh, 420px); }

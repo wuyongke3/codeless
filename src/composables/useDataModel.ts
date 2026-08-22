@@ -1,5 +1,6 @@
-﻿import { computed, ref, watch, type ComputedRef } from 'vue'
+import { computed, ref, watch, type ComputedRef } from 'vue'
 import type { LowCodeProject, LowCodeWidget, QueryResult, TableMeta } from '../types/lowcode'
+import { getWidgetConfig } from './widgetConfig'
 
 export function useDataModel(
   currentProject: ComputedRef<LowCodeProject | undefined>,
@@ -37,7 +38,7 @@ export function useDataModel(
 
   async function loadTableRows(tableName?: string) {
     const table = tableName || selectedTableId.value
-    if (!table || !window.lowcode?.queryRows) {
+    if (!table || (!window.lowcode?.queryRows && !window.lowcode?.refreshTable)) {
       tableRows.value = []
       tableColumns.value = []
       tableTotal.value = 0
@@ -45,13 +46,25 @@ export function useDataModel(
     }
     tableLoading.value = true
     try {
-      const result = await window.lowcode.queryRows(table, { limit: tablePageSize, offset: tablePage.value * tablePageSize })
-      tableColumns.value = result.columns
-      tableRows.value = result.rows
-      tableTotal.value = result.total
+      const options = { limit: tablePageSize, offset: tablePage.value * tablePageSize }
+      const refreshed = window.lowcode.refreshTable
+        ? await window.lowcode.refreshTable(table, options)
+        : null
+      if (refreshed) {
+        tables.value = refreshed.tables
+        const result = refreshed.result
+        tableColumns.value = result.columns
+        tableRows.value = result.rows
+        tableTotal.value = result.total
+      } else {
+        const result = await window.lowcode.queryRows(table, options)
+        tableColumns.value = result.columns
+        tableRows.value = result.rows
+        tableTotal.value = result.total
+      }
     } catch (error) {
-      console.error('加载表数据失败:', error)
-      notify('加载数据失败', 'danger')
+      console.error('???????:', error)
+      notify('??????', 'danger')
     } finally {
       tableLoading.value = false
     }
@@ -63,7 +76,6 @@ export function useDataModel(
       await window.lowcode.insertRow({ table: selectedTableId.value, data })
       notify('记录已添加')
       await loadTableRows()
-      await loadTables()
       return true
     } catch (error) {
       console.error(error)
@@ -78,7 +90,6 @@ export function useDataModel(
       await window.lowcode.updateRow({ table: selectedTableId.value, id, data })
       notify('记录已更新')
       await loadTableRows()
-      await loadTables()
       return true
     } catch (error) {
       console.error(error)
@@ -93,7 +104,6 @@ export function useDataModel(
       await window.lowcode.deleteRow(selectedTableId.value, id)
       notify('记录已删除', 'info')
       await loadTableRows()
-      await loadTables()
       return true
     } catch (error) {
       console.error(error)
@@ -103,26 +113,25 @@ export function useDataModel(
   }
 
   async function loadWidgetData(widget: LowCodeWidget): Promise<QueryResult | null> {
-    const dataSource = widget.props.dataSource
-    if (!dataSource?.table || !window.lowcode?.queryRows) return null
+    const dataSource = getWidgetConfig(widget).data
+    if (dataSource.source !== 'table' || !dataSource.table || !window.lowcode?.queryRows) return null
     try {
       return await window.lowcode.queryRows(dataSource.table, {
-        columns: dataSource.columns,
+        columns: Object.values(dataSource.fields || {}).filter(Boolean),
         where: dataSource.where,
         orderBy: dataSource.orderBy,
         limit: dataSource.limit || 10,
         mode: dataSource.mode,
+        aggregate: dataSource.aggregate,
       })
     } catch {
       return null
     }
   }
 
-  async function submitFormToTable(buttonWidget: LowCodeWidget) {
-    const target = buttonWidget.props.submitTo
-    if (!target?.table || !currentProject.value || (!window.lowcode?.submitForm && !window.lowcode?.insertRow)) return
-    const mapping = target.fieldMapping || {}
-    const targetMeta = tables.value.find(table => table.name === target.table)
+  async function submitValuesToTable(targetTable: string, values: Record<string, unknown>, mapping: Record<string, string> = {}) {
+    if (!targetTable || !currentProject.value || (!window.lowcode?.submitForm && !window.lowcode?.insertRow)) return false
+    const targetMeta = tables.value.find(table => table.name === targetTable)
     const normalize = (value: string) => value.trim().toLowerCase().replace(/[\s_-]+/g, '')
     const aliases: Record<string, string[]> = {
       name: ['姓名', '名称', '客户名称', '客户名'],
@@ -139,29 +148,37 @@ export function useDataModel(
     const data: Record<string, unknown> = {}
     for (const widget of currentProject.value.layout.widgets) {
       if (widget.type !== 'input' && widget.type !== 'select') continue
-      const label = String(widget.props.text || widget.name || '')
+      const config = getWidgetConfig(widget)
+      const label = String(config.content.label || config.content.text || widget.name || '')
       const normalizedLabel = normalize(label)
       const byDescription = targetMeta?.fields.find(field => normalize(field.description) === normalizedLabel)
       const byName = targetMeta?.fields.find(field => normalize(field.name) === normalizedLabel)
       const byAlias = targetMeta?.fields.find(field => aliases[field.name]?.some(alias => normalize(alias) === normalizedLabel))
-      const mappedName = mapping[widget.id]
+      const mappedName = mapping[widget.id] || config.data.field
       const fieldName = targetMeta?.fields.find(field => field.name === mappedName)?.name || byDescription?.name || byName?.name || byAlias?.name
-      if (fieldName) data[fieldName] = widget.props.value || ''
+      if (fieldName) data[fieldName] = values[widget.id] ?? (config.data.field ? values[config.data.field] : undefined) ?? config.content.value ?? config.content.defaultValue ?? ''
     }
     if (!Object.keys(data).length) {
       notify('未找到可提交的表单字段', 'info')
-      return
+      return false
     }
     try {
-      if (window.lowcode.submitForm) await window.lowcode.submitForm({ table: target.table, data })
-      else await window.lowcode.insertRow({ table: target.table, data })
+      if (window.lowcode.submitForm) await window.lowcode.submitForm({ table: targetTable, data })
+      else await window.lowcode.insertRow({ table: targetTable, data })
       notify('表单数据已提交')
+      return true
     } catch (error) {
       console.error(error)
       notify('提交失败', 'danger')
+      return false
     }
   }
 
+  async function submitFormToTable(buttonWidget: LowCodeWidget, runtimeValues: Record<string, unknown> = {}) {
+    const target = getWidgetConfig(buttonWidget).submitTo
+    if (!target?.table) return false
+    return submitValuesToTable(target.table, runtimeValues, target.fieldMapping)
+  }
   watch(selectedTableId, () => {
     tablePage.value = 0
     void loadTableRows()
@@ -170,6 +187,6 @@ export function useDataModel(
   return {
     selectedTableId, selectedTable, tables, tableRows, tableColumns, tableTotal, tableLoading, tablePage,
     showRowEditor, editingRow, newRowData, loadTables, loadTableRows, insertTableRow, updateTableRow,
-    deleteTableRow, loadWidgetData, submitFormToTable,
+    deleteTableRow, loadWidgetData, submitValuesToTable, submitFormToTable,
   }
 }

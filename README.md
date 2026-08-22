@@ -74,14 +74,20 @@ src/composables/useLowcode.ts       设计器状态与业务逻辑
 src/components/WidgetRenderer.vue   低代码组件渲染器
 src/components/AppIcon.vue          本地 SVG 图标组件
 src/types/lowcode.ts                领域类型
-src/style.css                       完整视觉样式
+src/style.css                       全局 reset 与应用壳层布局
+src/styles/*.css                   设计令牌、视图与运行时样式模块
+ docs/COMPONENT_DATA_PROTOCOL.md      组件统一协议、字段和交互用法
 ```
 
 ## 验证结果
 
 - `npm run typecheck` ✅
 - `npm run build:vite` ✅
-- Electron 隐藏烟雾测试 ✅，已实际创建并初始化 `codeless.sqlite`
+- Electron 主进程与 preload 已通过构建；运行时会自动创建并初始化 `codeless.sqlite`
+
+## 组件协议说明
+
+完整的组件字段、数据绑定、事件动作、设计器快捷键和迁移规则见 docs/COMPONENT_DATA_PROTOCOL.md。
 
 ## 原型说明
 

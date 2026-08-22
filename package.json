@@ -34,7 +34,8 @@
                     "build:linux:x64":  "node scripts/build.mjs --linux --x64",
                     "build:linux:arm64":  "node scripts/build.mjs --linux --arm64",
                     "build:linux:all":  "node scripts/build.mjs --linux --x64 --arm64",
-                    "preview":  "vite preview"
+                    "preview":  "vite preview",
+                    "test:e2e":  "npm run build:vite \u0026\u0026 electron --no-sandbox scripts/e2e-electron.mjs"
                 },
     "devDependencies":  {
                             "@vitejs/plugin-vue":  "^6.0.7",

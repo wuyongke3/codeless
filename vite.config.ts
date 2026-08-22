@@ -1,7 +1,7 @@
-import fs from 'node:fs'
+﻿import fs from 'node:fs'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { electronSimple } from 'vite-plugin-electron/multi-env'
+import electronMulti, { electronSimple } from 'vite-plugin-electron/multi-env'
 import { notBundle } from 'vite-plugin-electron/plugin'
 
 // https://vitejs.dev/config/
@@ -43,6 +43,20 @@ export default defineConfig(({ command }) => {
         // See https://github.com/electron-vite/vite-plugin-electron-renderer
         // renderer: {},
       }),
+      electronMulti([{
+        name: 'database',
+        input: 'electron/database/worker.ts',
+        plugins: [notBundle()],
+        // The database utility process must never trigger Electron startup in dev mode.
+        onstart: () => undefined,
+        options: {
+          build: {
+            sourcemap,
+            minify: isBuild,
+            outDir: 'dist-electron/database',
+          },
+        },
+      }]),
     ],
     clearScreen: false,
   }

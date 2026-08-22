@@ -1,6 +1,8 @@
-﻿import { computed, nextTick, reactive, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, nextTick, reactive, ref, type ComputedRef, type Ref } from 'vue'
 import type { ActivityItem, BootstrapData, LowCodeProject } from '../types/lowcode'
 import { clone, createTemplateLayout, fallbackBootstrap, makeId, type Area } from './utils'
+import { normalizeProject } from './widgetConfig'
+import { browserExportProject, browserImportProject, browserSaveProject } from './browserData'
 
 interface ProjectManagerOptions {
   loading: Ref<boolean>
@@ -31,7 +33,7 @@ export function useProjectManager(options: ProjectManagerOptions) {
     loading.value = true
     try {
       const result: BootstrapData = window.lowcode ? await window.lowcode.bootstrap() : fallbackBootstrap()
-      projects.value = result.projects
+      projects.value = result.projects.map(normalizeProject)
       activities.value = result.activities
       databasePath.value = result.databasePath
       currentProjectId.value = result.projects[0]?.id || ''
@@ -39,7 +41,7 @@ export function useProjectManager(options: ProjectManagerOptions) {
     } catch (error) {
       console.error(error)
       const result = fallbackBootstrap()
-      projects.value = result.projects
+      projects.value = result.projects.map(normalizeProject)
       activities.value = result.activities
       databasePath.value = result.databasePath
       currentProjectId.value = result.projects[0]?.id || ''
@@ -60,6 +62,7 @@ export function useProjectManager(options: ProjectManagerOptions) {
     saving.value = true
     try {
       currentProject.value.updatedAt = new Date().toISOString()
+      normalizeProject(currentProject.value)
       let saved = clone(currentProject.value)
       if (window.lowcode) saved = await window.lowcode.saveProject(saved)
       else localStorage.setItem('codeless-projects', JSON.stringify(projects.value))
@@ -75,6 +78,52 @@ export function useProjectManager(options: ProjectManagerOptions) {
     }
   }
 
+  async function exportProject() {
+    if (!currentProject.value) return
+    try {
+      const result = window.lowcode
+        ? await window.lowcode.exportProject(clone(currentProject.value))
+        : await browserExportProject(clone(currentProject.value))
+      if (!result.canceled) notify('\u9879\u76ee\u5df2\u5bfc\u51fa\u4e3a .codeless \u6587\u4ef6')
+    } catch (error) {
+      console.error(error)
+      notify('\u5bfc\u51fa\u5931\u8d25\uff0c\u672a\u4fee\u6539\u5f53\u524d\u9879\u76ee', 'danger')
+    }
+  }
+
+  async function importProject() {
+    try {
+      const result = window.lowcode ? await window.lowcode.importProject() : await browserImportProject()
+      const importedProject = result.project
+      if (result.canceled || !importedProject) return
+
+      const imported = normalizeProject(clone(importedProject))
+      const collision = projects.value.some(project => project.id === imported.id)
+      if (collision) {
+        const createdAt = new Date().toISOString()
+        imported.id = makeId('project')
+        imported.name = `${imported.name} \uFF08\u5BFC\u5165\u526F\u672C\uFF09`
+        imported.status = 'draft'
+        imported.createdAt = createdAt
+        imported.updatedAt = createdAt
+      }
+
+      const saved = window.lowcode
+        ? await window.lowcode.saveProject(clone(imported))
+        : browserSaveProject(imported)
+      projects.value = [saved, ...projects.value.filter(project => project.id !== saved.id)]
+      currentProjectId.value = saved.id
+      selectedWidgetId.value = ''
+      activeArea.value = 'builder'
+      dirty.value = false
+      resetDesigner()
+      notify(collision ? '\u5df2\u5bfc\u5165\u4e3a\u65b0\u5e94\u7528\uff08\u539f\u9879\u76ee\u672a\u88ab\u8986\u76d6\uff09' : '\u9879\u76ee\u5df2\u5bfc\u5165')
+    } catch (error) {
+      console.error(error)
+      notify('\u5bfc\u5165\u5931\u8d25\uff0c\u539f\u6709\u9879\u76ee\u4fdd\u6301\u4e0d\u53d8', 'danger')
+    }
+  }
+
   async function publishProject() {
     if (!currentProject.value) return
     currentProject.value.status = 'published'
@@ -87,7 +136,7 @@ export function useProjectManager(options: ProjectManagerOptions) {
       let copy: LowCodeProject
       if (window.lowcode) copy = await window.lowcode.duplicateProject(project.id)
       else {
-        copy = clone(project)
+        copy = normalizeProject(clone(project))
         copy.id = makeId('project')
         copy.name += ' 副本'
         copy.status = 'draft'
@@ -171,6 +220,6 @@ export function useProjectManager(options: ProjectManagerOptions) {
 
   return {
     saving, showCreateModal, showDeleteConfirm, createForm, bootstrap, openBuilder, saveProject,
-    publishProject, duplicateProject, openCreateProject, createProject, confirmDeleteProject, formatRelative, formatDate,
+    exportProject, importProject, publishProject, duplicateProject, openCreateProject, createProject, confirmDeleteProject, formatRelative, formatDate,
   }
 }

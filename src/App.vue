@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, reactive } from 'vue'
 import AppIcon from './components/AppIcon.vue'
 import PreviewModal from './components/common/PreviewModal.vue'
@@ -10,6 +10,7 @@ import BuilderView from './views/BuilderView.vue'
 import DataModelView from './views/DataModelView.vue'
 import FlowsView from './views/FlowsView.vue'
 import WorkspaceView from './views/WorkspaceView.vue'
+import PluginsView from './views/PluginsView.vue'
 import { navItems } from './composables/utils'
 import { useLowcode } from './composables/useLowcode'
 
@@ -21,6 +22,7 @@ const currentView = computed(() => {
   if (state.activeArea === 'builder') return BuilderView
   if (state.activeArea === 'data') return DataModelView
   if (state.activeArea === 'flows') return FlowsView
+  if (state.activeArea === 'plugins') return PluginsView
   return ActivityView
 })
 </script>
