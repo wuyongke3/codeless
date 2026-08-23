@@ -590,6 +590,40 @@ function browserDeleteProject(projectId: string) {
   return { success: true }
 }
 
+let browserCollaborationSession: import('../types/collaboration').CollaborationSession | null = null
+const browserCollaborationListeners = new Set<(event: import('../types/collaboration').CollaborationEvent) => void>()
+const browserCollaborationChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('codeless-collaboration-v1') : null
+browserCollaborationChannel?.addEventListener('message', event => {
+  const message = event.data as { sessionId?: string; event?: import('../types/collaboration').CollaborationEvent }
+  if (!browserCollaborationSession || message.sessionId !== browserCollaborationSession.id || !message.event) return
+  for (const listener of browserCollaborationListeners) listener(message.event)
+})
+
+const browserCollaboration: import('../types/collaboration').CollaborationApi = {
+  async createSession(input) {
+    browserCollaborationSession = {
+      id: makeId('session'), projectId: input.project.id, mode: input.mode, role: 'host', host: '本机浏览器',
+      token: makeId('token'), createdAt: new Date().toISOString(), participants: [],
+    }
+    return browserCollaborationSession
+  },
+  async joinSession(input) {
+    if (input.token !== browserCollaborationSession?.token || input.sessionId !== browserCollaborationSession?.id) throw new Error('协作会话凭证无效')
+    if (!browserCollaborationSession) throw new Error('当前没有活动协作会话')
+    browserCollaborationSession = { ...browserCollaborationSession, role: 'guest' }
+    return browserCollaborationSession
+  },
+  async getSession() { return browserCollaborationSession },
+  async publishProject(project) {
+    if (!browserCollaborationSession) throw new Error('协作会话尚未建立')
+    browserCollaborationChannel?.postMessage({ sessionId: browserCollaborationSession.id, event: { type: 'project-update', project, originId: 'browser', updatedAt: project.updatedAt } })
+    return { success: true }
+  },
+  async leaveSession() { browserCollaborationSession = null; return { success: true } },
+  async openWindow() { throw new Error('浏览器回退模式不支持打开协作窗口') },
+  onEvent(listener) { browserCollaborationListeners.add(listener); return () => browserCollaborationListeners.delete(listener) },
+}
+
 export const browserApi: LowCodeApi = {
   bootstrap: async () => browserBootstrap(),
   saveProject: async project => browserSaveProject(project),
@@ -617,6 +651,7 @@ export const browserApi: LowCodeApi = {
     return plugin
   },
   getPluginUiUrl: async () => null,
+  collaboration: browserCollaboration,
 }
 
 

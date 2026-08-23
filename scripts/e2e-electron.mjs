@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 
@@ -73,7 +73,7 @@ function widgetSnapshot() {
 async function clickWidget(id, shiftKey = false) {
   return inRenderer((widgetId, additive) => {
     const element = document.querySelector(`[data-widget-id="${widgetId}"]`)
-    if (!element) throw new Error(`??????${widgetId}`)
+    if (!element) throw new Error(`找不到组件 ${widgetId}`)
     element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, shiftKey: additive }))
   }, id, shiftKey)
 }
@@ -81,7 +81,7 @@ async function clickWidget(id, shiftKey = false) {
 async function rightClickWidget(id, clientX = 260, clientY = 220) {
   return inRenderer((widgetId, x, y) => {
     const element = document.querySelector(`[data-widget-id="${widgetId}"]`)
-    if (!element) throw new Error(`??????${widgetId}`)
+    if (!element) throw new Error(`找不到组件 ${widgetId}`)
     element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: x, clientY: y }))
   }, id, clientX, clientY)
 }
@@ -89,8 +89,8 @@ async function rightClickWidget(id, clientX = 260, clientY = 220) {
 async function clickMenu(command) {
   return inRenderer(commandValue => {
     const button = document.querySelector(`[data-menu-command="${commandValue}"]`)
-    if (!(button instanceof HTMLButtonElement)) throw new Error(`????????${commandValue}`)
-    if (button.disabled) throw new Error(`????????${commandValue}`)
+    if (!(button instanceof HTMLButtonElement)) throw new Error(`找不到菜单命令 ${commandValue}`)
+    if (button.disabled) throw new Error(`找不到菜单命令 ${commandValue}`)
     button.click()
   }, command)
 }
@@ -98,7 +98,7 @@ async function clickMenu(command) {
 async function rightClickCanvas(clientX = 1400, clientY = 900) {
   return inRenderer((x, y) => {
     const canvas = document.querySelector('.design-canvas')
-    if (!canvas) throw new Error('?????')
+    if (!canvas) throw new Error('找不到画布')
     canvas.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: x, clientY: y }))
   }, clientX, clientY)
 }
@@ -106,7 +106,7 @@ async function rightClickCanvas(clientX = 1400, clientY = 900) {
 async function clearSelection() {
   return inRenderer(() => {
     const canvas = document.querySelector('.design-canvas')
-    if (!canvas) throw new Error('?????')
+    if (!canvas) throw new Error('找不到画布')
     canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: 10, clientY: 10 }))
   })
 }
@@ -180,7 +180,13 @@ async function main() {
   })
 
   await win.loadFile(path.join(root, 'dist', 'index.html'))
-  await waitFor(() => inRenderer(() => Boolean(document.querySelector('.design-canvas')) && !document.querySelector('.boot-screen')))
+  await waitFor(() => inRenderer(() => !document.querySelector('.boot-screen')))
+  await inRenderer(() => {
+    const project = document.querySelector('.project-card')
+    if (!(project instanceof HTMLElement)) throw new Error('home route did not render a project card')
+    project.click()
+  })
+  await waitFor(() => inRenderer(() => Boolean(document.querySelector('.design-canvas'))))
   await inRenderer(() => {
     window.addEventListener('error', event => { window.__codelessE2eErrors ||= []; window.__codelessE2eErrors.push(event.message) })
     window.addEventListener('unhandledrejection', event => { window.__codelessE2eErrors ||= []; window.__codelessE2eErrors.push(String(event.reason)) })
@@ -204,6 +210,62 @@ async function main() {
     assert.equal(new Set(snapshot.map(item => item.id)).size, snapshot.length, '组件 ID 不唯一')
   })
 
+  await runCase('local collaboration panel and WebGL layer', async () => {
+    const toolbarExists = await inRenderer(() => document.querySelector('[data-collaboration-toggle]') instanceof HTMLButtonElement)
+    assert.equal(toolbarExists, true, 'missing collaboration toolbar entry')
+    await inRenderer(() => {
+      const button = document.querySelector('[data-collaboration-toggle]')
+      if (!(button instanceof HTMLButtonElement)) throw new Error('collaboration toolbar entry not found')
+      button.click()
+    })
+    await waitFor(() => inRenderer(() => Boolean(document.querySelector('[data-collaboration-panel]'))))
+    const collaboration = await inRenderer(() => {
+      const panel = document.querySelector('[data-collaboration-panel]')
+      const mode = panel?.querySelector('[data-collaboration-mode]')
+      const create = panel?.querySelector('[data-collaboration-create]')
+      return {
+        panel: Boolean(panel),
+        mode: mode instanceof HTMLSelectElement ? mode.value : '',
+        createEnabled: create instanceof HTMLButtonElement && !create.disabled,
+      }
+    })
+    assert.equal(collaboration.panel, true, 'collaboration panel did not open')
+    assert.equal(collaboration.mode, 'same-device', 'default collaboration mode is not same-device')
+    assert.equal(collaboration.createEnabled, true, 'create session button is disabled')
+    assert.equal(await inRenderer(() => Boolean(document.querySelector('[data-testid="canvas-webgl-layer"]'))), true, 'missing WebGL canvas layer')
+    await inRenderer(() => {
+      const create = document.querySelector('[data-collaboration-create]')
+      if (!(create instanceof HTMLButtonElement)) throw new Error('create session button not found')
+      create.click()
+    })
+    await waitFor(() => inRenderer(() => Boolean(document.querySelector('.collaboration-session-card'))))
+    const session = await inRenderer(() => {
+      const card = document.querySelector('.collaboration-session-card')
+      const inputs = card ? Array.from(card.querySelectorAll('input')) : []
+      return {
+        mode: card?.textContent?.includes('同机协作已开启') ? 'same-device' : 'unknown',
+        hasSessionId: Boolean(inputs[0]?.value),
+        hasToken: Boolean(inputs[1]?.value),
+        hasLanAddress: Boolean(card?.querySelector('input[readonly]') && card?.textContent?.includes('局域网地址')),
+      }
+    })
+    assert.equal(session.mode, 'same-device', 'created session unexpectedly uses LAN mode')
+    assert.equal(session.hasSessionId, true, 'created session has no session ID')
+    assert.equal(session.hasToken, true, 'created session has no collaboration token')
+    assert.equal(session.hasLanAddress, false, 'same-device session should not expose a LAN address')
+    await inRenderer(() => {
+      const leave = document.querySelector('.collaboration-session-card .danger-button')
+      if (!(leave instanceof HTMLButtonElement)) throw new Error('leave session button not found')
+      leave.click()
+    })
+    await waitFor(() => inRenderer(() => !document.querySelector('.collaboration-session-card')))
+    await inRenderer(() => {
+      const close = document.querySelector('[data-collaboration-panel] [data-collaboration-close]')
+      if (!(close instanceof HTMLButtonElement)) throw new Error('collaboration close button not found')
+      close.click()
+    })
+    await waitFor(() => inRenderer(() => !document.querySelector('[data-collaboration-panel]')))
+  })
   await runCase('设计交换导入导出入口', async () => {
     const controls = await inRenderer(() => {
       const importButton = document.querySelector('[data-design-exchange="import"]')
@@ -270,6 +332,85 @@ async function main() {
     await clearSelection()
     await sleep(30)
     assert.equal(await inRenderer(() => document.querySelectorAll('.canvas-widget.selected').length), 0)
+  })
+
+  await runCase('画布网格与智能吸附入口', async () => {
+    const initial = await inRenderer(() => {
+      const grid = document.querySelector('[data-testid="canvas-grid-toggle"]')
+      const snap = document.querySelector('[data-testid="canvas-snap-toggle"]')
+      const pattern = document.querySelector('.canvas-grid-pattern')
+      return {
+        gridExists: grid instanceof HTMLButtonElement,
+        snapExists: snap instanceof HTMLButtonElement,
+        gridActive: grid?.classList.contains('active') || false,
+        snapActive: snap?.classList.contains('active') || false,
+        opacity: pattern ? getComputedStyle(pattern).opacity : '',
+      }
+    })
+    assert.equal(initial.gridExists, true, '网格开关不存在')
+    assert.equal(initial.snapExists, true, '智能吸附开关不存在')
+    assert.equal(initial.gridActive, true, '网格默认应开启')
+    assert.equal(initial.snapActive, true, '智能吸附默认应开启')
+    assert.equal(initial.opacity, '1', '网格图层默认不可见')
+
+    await inRenderer(() => {
+      const button = document.querySelector('[data-testid="canvas-grid-toggle"]')
+      if (!(button instanceof HTMLButtonElement)) throw new Error('网格开关不存在')
+      button.click()
+    })
+    await sleep(30)
+    const hidden = await inRenderer(() => ({
+      active: document.querySelector('[data-testid="canvas-grid-toggle"]')?.classList.contains('active') || false,
+      opacity: getComputedStyle(document.querySelector('.canvas-grid-pattern')).opacity,
+    }))
+    assert.equal(hidden.active, false, '网格关闭后按钮仍为 active')
+    assert.equal(hidden.opacity, '0', '网格关闭后图层 opacity 未变化')
+
+    await inRenderer(() => {
+      const button = document.querySelector('[data-testid="canvas-grid-toggle"]')
+      if (!(button instanceof HTMLButtonElement)) throw new Error('网格开关不存在')
+      button.click()
+    })
+    await inRenderer(() => {
+      const button = document.querySelector('[data-testid="canvas-snap-toggle"]')
+      if (!(button instanceof HTMLButtonElement)) throw new Error('智能吸附开关不存在')
+      button.click()
+    })
+    await sleep(30)
+    assert.equal(await inRenderer(() => document.querySelector('[data-testid="canvas-snap-toggle"]')?.classList.contains('active') || false), false, '关闭吸附后按钮仍为 active')
+    await inRenderer(() => {
+      const button = document.querySelector('[data-testid="canvas-snap-toggle"]')
+      if (!(button instanceof HTMLButtonElement)) throw new Error('智能吸附开关不存在')
+      button.click()
+    })
+  })
+
+  await runCase('多选对齐操作与撤销', async () => {
+    await clickWidget(initialIds[0])
+    await clickWidget(initialIds[1], true)
+    await clickWidget(initialIds[2], true)
+    await waitFor(() => inRenderer(() => Boolean(document.querySelector('.canvas-selection-toolbar'))))
+    const selected = await inRenderer(() => document.querySelectorAll('.canvas-widget.selected').length)
+    assert.equal(selected, 3, `多选组件数量异常：${selected}`)
+    const before = await inRenderer(ids => ids.map(id => ({
+      id,
+      left: Number.parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left),
+    })), initialIds)
+    await inRenderer(() => {
+      const button = document.querySelector('.canvas-selection-toolbar button[title="左对齐"]')
+      if (!(button instanceof HTMLButtonElement)) throw new Error('左对齐按钮不存在')
+      button.click()
+    })
+    await sleep(70)
+    const after = await inRenderer(ids => ids.map(id => Number.parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left)), initialIds)
+    assert.equal(new Set(after).size, 1, `左对齐结果不一致：${after.join(', ')}`)
+    assert.ok(new Set(before.map(item => item.left)).size > 1, `测试初始位置未形成可验证差异：${JSON.stringify(before)}`)
+
+    await inRenderer(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })))
+    await sleep(70)
+    const undone = await inRenderer(ids => ids.map(id => Number.parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left)), initialIds)
+    assert.deepEqual(undone, before.map(item => item.left), `左对齐操作未被撤销：${JSON.stringify({ before, undone })}`)
+    await clearSelection()
   })
 
   await runCase('本地 Inspect、代码生成与 SVG 导出入口', async () => {
@@ -449,8 +590,8 @@ async function main() {
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-drawer .service-close')?.click())
     await sleep(40)
     assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-drawer .render-drawer')).display), 'none', 'Drawer 关闭按钮没有隐藏抽屉')
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-loading .render-loading')).display), 'flex', 'Loading ??????')
-    assert.ok(await inRenderer(() => Boolean(document.querySelector('.runtime-widget-node.widget-loading .loading-spinner'))), 'Loading spinner ????')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-loading .render-loading')).display), 'flex', 'Loading 状态未显示')
+    assert.ok(await inRenderer(() => Boolean(document.querySelector('.runtime-widget-node.widget-loading .loading-spinner'))), 'Loading spinner 未渲染')
     await closePreview()
   })
   await runCase('右键菜单弹出、边界翻转与动画规则', async () => {
@@ -595,13 +736,26 @@ async function main() {
   })
 
   await runCase('容器粘贴目标与子节点渲染', async () => {
-    const containerInfo = await inRenderer(() => {
+    let containerInfo = await inRenderer(() => {
       const nodes = Array.from(document.querySelectorAll('.canvas-widget'))
       const node = nodes.find(item => ['card', 'frame', 'modal', 'stack', 'grid', 'drawer', 'loading'].includes(item.dataset.widgetType || ''))
       return { id: node?.dataset.widgetId, types: nodes.map(item => item.dataset.widgetType) }
     })
+    if (!containerInfo.id) {
+      await inRenderer(() => {
+        const button = document.querySelector('.component-grid button[data-widget-type="card"]')
+        if (!(button instanceof HTMLButtonElement)) throw new Error('找不到卡片容器组件入口')
+        button.click()
+      })
+      await sleep(80)
+      containerInfo = await inRenderer(() => {
+        const nodes = Array.from(document.querySelectorAll('.canvas-widget'))
+        const node = nodes.find(item => ['card', 'frame', 'modal', 'stack', 'grid', 'drawer', 'loading'].includes(item.dataset.widgetType || ''))
+        return { id: node?.dataset.widgetId, types: nodes.map(item => item.dataset.widgetType) }
+      })
+    }
     const containerId = containerInfo.id
-    assert.ok(containerId, `?????????????${containerInfo.types.join(',')}`)
+    assert.ok(containerId, `未找到可粘贴的容器：${containerInfo.types.join(',')}`)
     await clickWidget(initialIds[2])
     await rightClickWidget(initialIds[2], 320, 270)
     await sleep(20)
@@ -648,6 +802,74 @@ async function main() {
     await inRenderer(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     await waitForMenuClosed()
     assert.equal(await inRenderer(() => Boolean(document.querySelector('.canvas-context-menu'))), false)
+  })
+
+  await runCase('viewport navigation and transform integration', async () => {
+    const initial = await inRenderer(() => {
+      const stage = document.querySelector('.canvas-stage')
+      const frame = document.querySelector('.canvas-frame')
+      const canvas = document.querySelector('.design-canvas')
+      if (!(stage instanceof HTMLElement) || !(frame instanceof HTMLElement) || !(canvas instanceof HTMLElement)) throw new Error('viewport DOM is incomplete')
+      return {
+        canvasWidth: canvas.clientWidth,
+        canvasHeight: canvas.clientHeight,
+        transform: frame.style.transform,
+        stagePosition: getComputedStyle(stage).position,
+      }
+    })
+    assert.equal(initial.canvasWidth, 960)
+    assert.equal(initial.canvasHeight, 720)
+    assert.match(initial.transform, /scale\(/)
+    assert.equal(initial.stagePosition, 'absolute')
+
+    await inRenderer(() => {
+      const select = document.querySelector('.builder-center-tools select')
+      if (!(select instanceof HTMLSelectElement)) throw new Error('zoom selector not found')
+      select.value = '1.5'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await sleep(60)
+    const zoomed = await inRenderer(() => document.querySelector('.canvas-frame')?.style.transform || '')
+    assert.match(zoomed, /scale\(1\.5\)/)
+
+    const beforePan = await inRenderer(() => {
+      const frame = document.querySelector('.canvas-frame')
+      if (!(frame instanceof HTMLElement)) throw new Error('canvas frame not found')
+      const rect = frame.getBoundingClientRect()
+      return { left: rect.left, top: rect.top }
+    })
+    await inRenderer(() => {
+      const canvas = document.querySelector('.design-canvas')
+      if (!(canvas instanceof HTMLElement)) throw new Error('canvas transform node not found')
+      const rect = canvas.getBoundingClientRect()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }))
+      canvas.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerId: 77, clientX: rect.left + 120, clientY: rect.top + 120 }))
+      canvas.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, button: 0, pointerId: 77, clientX: rect.left + 156, clientY: rect.top + 138 }))
+      canvas.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, button: 0, pointerId: 77, clientX: rect.left + 156, clientY: rect.top + 138 }))
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', bubbles: true }))
+    })
+    await sleep(30)
+    const afterPan = await inRenderer(() => {
+      const frame = document.querySelector('.canvas-frame')
+      if (!(frame instanceof HTMLElement)) throw new Error('canvas frame not found')
+      const rect = frame.getBoundingClientRect()
+      return { left: rect.left, top: rect.top }
+    })
+    const moved = { dx: afterPan.left - beforePan.left, dy: afterPan.top - beforePan.top }
+    assert.ok(Math.abs(moved.dx) > 1 || Math.abs(moved.dy) > 1, `space pan did not move viewport: ${JSON.stringify(moved)}`)
+
+    await inRenderer(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', shiftKey: true, bubbles: true })))
+    await sleep(60)
+    const fitted = await inRenderer(() => {
+      const stage = document.querySelector('.canvas-stage')
+      const canvas = document.querySelector('.design-canvas')
+      if (!(stage instanceof HTMLElement) || !(canvas instanceof HTMLElement)) throw new Error('fit nodes not found')
+      const stageRect = stage.getBoundingClientRect()
+      const canvasRect = canvas.getBoundingClientRect()
+      return { width: canvasRect.width, height: canvasRect.height, stageWidth: stageRect.width, stageHeight: stageRect.height }
+    })
+    assert.ok(fitted.width <= fitted.stageWidth + 2, `fit page width exceeds viewport: ${JSON.stringify(fitted)}`)
+    assert.ok(fitted.height <= fitted.stageHeight + 2, `fit page height exceeds viewport: ${JSON.stringify(fitted)}`)
   })
 
   const browserErrors = await inRenderer(() => window.__codelessE2eErrors || [])

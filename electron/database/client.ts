@@ -1,10 +1,12 @@
-import { utilityProcess, type UtilityProcess } from 'electron'
+﻿import { utilityProcess, type UtilityProcess } from 'electron'
 
 type DatabaseReadyMessage = { type: 'ready'; databasePath: string }
 type DatabaseInitErrorMessage = { type: 'init-error'; error: { message: string; stack?: string } }
 type DatabaseResponse =
   | { id: number; ok: true; result: unknown }
   | { id: number; ok: false; error: { message: string; stack?: string } }
+
+const CLOSE_DRAIN_TIMEOUT_MS = 5_000
 
 type PendingRequest = {
   resolve: (value: unknown) => void
@@ -19,6 +21,7 @@ export class DatabaseClient {
   private readyResolve: (() => void) | null = null
   private readyReject: ((reason?: unknown) => void) | null = null
   private closed = false
+  private activeRequests = 0
 
   async start(workerPath: string, databasePath: string) {
     if (this.process && this.readyPromise) return this.readyPromise
@@ -52,24 +55,49 @@ export class DatabaseClient {
 
   async request<T>(method: string, ...args: unknown[]): Promise<T> {
     if (!this.process || !this.readyPromise || this.closed) throw new Error('SQLite utility process is not running')
-    await this.readyPromise
-    const id = this.nextRequestId++
-    return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: value => resolve(value as T), reject })
-      try {
-        this.process?.postMessage({ id, method, args })
-      } catch (error) {
-        this.pending.delete(id)
-        reject(error)
-      }
-    })
+    const process = this.process
+    this.activeRequests += 1
+    try {
+      await this.readyPromise
+      if (!this.process || this.process !== process) throw new Error('SQLite utility process is not running')
+      const id = this.nextRequestId++
+      return await new Promise<T>((resolve, reject) => {
+        this.pending.set(id, { resolve: value => resolve(value as T), reject })
+        try {
+          process.postMessage({ id, method, args })
+        } catch (error) {
+          this.pending.delete(id)
+          reject(error)
+        }
+      })
+    } finally {
+      this.activeRequests -= 1
+    }
   }
 
-  close() {
+  async close() {
     this.closed = true
-    this.rejectPending(new Error('SQLite utility process closed'))
-    this.process?.kill()
-    this.clearProcess()
+    const process = this.process
+    if (!process) {
+      this.clearProcess()
+      return
+    }
+
+    const closingError = new Error('SQLite utility process closed')
+    const deadline = Date.now() + CLOSE_DRAIN_TIMEOUT_MS
+    while ((this.activeRequests > 0 || this.pending.size > 0) && this.process === process && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
+    if (this.activeRequests > 0) {
+      this.readyReject?.(closingError)
+      this.readyResolve = null
+      this.readyReject = null
+    }
+    this.rejectPending(closingError)
+    if (this.process === process) {
+      process.kill()
+      this.clearProcess()
+    }
   }
 
   private handleMessage(message: DatabaseReadyMessage | DatabaseInitErrorMessage | DatabaseResponse) {

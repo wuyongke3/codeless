@@ -1,0 +1,30 @@
+{
+  "exportedAt": "2026-08-22T00:00:00.000Z",
+  "project": {
+  "id": "fixture-project",
+  "name": "Page Designer Fixture",
+  "createdAt": "2026-08-22T00:00:00.000Z",
+  "updatedAt": "2026-08-22T00:00:00.000Z",
+  "layout": {
+    "pageName": "Fixture Page",
+    "canvas": { "width": 1440, "height": 900, "background": "#ffffff" },
+    "widgets": [
+      {
+        "id": "fixture-heading",
+        "type": "heading",
+        "name": "Fixture Heading",
+        "config": {
+          "version": 1,
+          "layout": { "x": 32, "y": 24, "width": 360, "height": 56, "rotation": 0, "zIndex": 1, "locked": false, "hidden": false },
+          "content": { "text": "Fixture heading" },
+          "style": { "fontSize": 28, "fontWeight": 700, "textAlign": "left", "color": "#111827" },
+          "data": { "source": "static" },
+          "validation": {},
+          "interaction": { "events": [] },
+          "meta": { "version": 1, "createdAt": "2026-08-22T00:00:00.000Z", "updatedAt": "2026-08-22T00:00:00.000Z" }
+        }
+      }
+    ]
+  }
+}
+}

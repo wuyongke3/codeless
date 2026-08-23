@@ -1,0 +1,15 @@
+*** Begin Patch
+*** Update File: src/composables/useDesigner.ts
+@@
+-import { applyLayoutPatch, createLayoutPatch, type LayoutPatch } from './layoutHistory'
+-import { getRenderedWidgetFrame } from './autoLayout'
++import type { LayoutPatch } from './layoutHistory'
++import { createDesignerSelectionController, selectWidgetsInRect } from './designer/selection'
++import { createDesignerHistoryController } from './designer/history'
++import { createDesignerLayoutModel } from './designer/layout'
++import { createDesignerPerformanceModel } from './designer/performance'
++import { createDesignerPersistence, designerPanelWidthLimits, readDesignerPanelWidth, saveDesignerPanelWidth } from './designer/persistence'
++import type { DesignerHistoryOptions } from './designer/collaboration'
++
++export type { DesignerHistoryOptions } from './designer/collaboration'
+*** End Patch

@@ -2,32 +2,18 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Comput
 import type { LowCodeProject, LowCodeWidget, PageLayout, WidgetEvent, WidgetEventAction, WidgetEventActionType, WidgetEventType, WidgetStyleTokenRefs, WidgetType } from '../types/lowcode'
 import { clone, createWidget, eventOptionsForWidget, makeId, paletteGroups, widgetDefaults, type Area } from './utils'
 import { getWidgetConfig, getWidgetEvents, isContainerType, normalizeWidget, parseColumns, parseOptions, serializeColumns, serializeOptions, setWidgetFrame, syncLegacyProps } from './widgetConfig'
-import { applyLayoutPatch, createLayoutPatch, type LayoutPatch } from './layoutHistory'
-import { getRenderedWidgetFrame } from './autoLayout'
+import type { LayoutPatch } from './layoutHistory'
+import { createDesignerSelectionController, selectWidgetsInRect } from './designer/selection'
+import { createDesignerHistoryController } from './designer/history'
+import { createDesignerLayoutModel } from './designer/layout'
+import { createDesignerPerformanceModel } from './designer/performance'
+import { createDesignerPersistence, designerPanelWidthLimits, readDesignerPanelWidth, saveDesignerPanelWidth } from './designer/persistence'
+import type { DesignerHistoryOptions } from './designer/collaboration'
+import { useDesignerCanvasViewport } from './designerCanvasViewport'
+import { alignFrames, distributeFrames, getCanvasGuideBounds, smartSnapFrame } from './designer/canvasGuides'
+import type { CanvasGuideFrame, CanvasGuideLine } from '../types/designerCanvasGuides'
 
-function readPanelWidth(key: string, fallback: number, min: number, max: number) {
-  if (typeof localStorage === 'undefined') return fallback
-  try {
-    const value = Number(localStorage.getItem(key))
-    return Number.isFinite(value) ? Math.round(Math.max(min, Math.min(max, value))) : fallback
-  } catch {
-    return fallback
-  }
-}
-
-function savePanelWidth(key: string, value: number) {
-  try { localStorage.setItem(key, String(value)) } catch { /* localStorage may be unavailable. */ }
-}
-
-function panelWidthLimits(side: 'component' | 'inspector') {
-  const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth
-  const min = side === 'component' ? 170 : 220
-  const desktopMax = side === 'component' ? 360 : 420
-  const ratio = side === 'component'
-    ? viewportWidth <= 900 ? 0.23 : 0.28
-    : viewportWidth <= 900 ? 0.28 : 0.32
-  return { min, max: Math.max(min, Math.min(desktopMax, Math.floor(viewportWidth * ratio))) }
-}
+export type { DesignerHistoryOptions } from './designer/collaboration'
 
 type InlineEditingField = 'text' | 'title' | 'label' | 'placeholder' | 'description' | 'trend'
 
@@ -81,14 +67,27 @@ export interface DesignerContextMenuState {
   targetId: string
 }
 
+export interface DesignerResetOptions {
+  /**
+   * Page-level mutations can replace the active layout while still needing
+   * their project snapshot to remain undoable. In that case clear only the
+   * designer-local layout history and keep the project history coordinator.
+   */
+  preserveProjectHistory?: boolean
+}
+
 export function useDesigner(
   currentProject: ComputedRef<LowCodeProject | undefined>,
   notify: (message: string, tone?: 'success' | 'info' | 'danger') => void,
   saveProject: (message?: string) => Promise<void>,
   activeArea?: Ref<Area>,
+  historyOptions: DesignerHistoryOptions = {},
 ) {
-  const selectedWidgetId = ref('')
-  const selectedWidgetIds = ref<string[]>([])
+  const selection = createDesignerSelectionController(currentProject)
+  const selectedWidgetId = selection.selectedWidgetId
+  const selectedWidgetIds = selection.selectedWidgetIds
+  const selectedWidgets = selection.selectedWidgets
+  const selectedWidget = selection.selectedWidget
   const paletteSearch = ref('')
   const paletteTab = ref<'components' | 'pages'>('components')
   const inspectorTab = ref<'properties' | 'events'>('properties')
@@ -97,11 +96,36 @@ export function useDesigner(
   const canvasRef = ref<HTMLElement | null>(null)
   const canvasViewportRef = ref<HTMLElement | null>(null)
   const canvasViewportVersion = ref(0)
-  const historyStack = ref<LayoutPatch[]>([])
-  const futureStack = ref<LayoutPatch[]>([])
+  const canvasPageSize = computed(() => {
+    const canvas = currentProject.value?.layout.canvas
+    return canvas ? { width: canvas.width || 960, height: canvas.height || 720 } : null
+  })
+  const canvasViewport = useDesignerCanvasViewport({
+    viewportRef: canvasViewportRef,
+    contentRef: canvasRef,
+    pageSize: canvasPageSize,
+    initialZoom: zoom,
+    minZoom: 0.25,
+    maxZoom: 2,
+    fitPadding: 48,
+    wheelZoom: true,
+    wheelPan: true,
+    panWithSpace: true,
+    panWithMiddleButton: true,
+    autoAttach: false,
+  })
+  const gridEnabled = ref(true)
+  const snapEnabled = ref(true)
+  const showCanvasGuides = ref(true)
+  const gridSize = ref(8)
+  const canvasGuideLines = ref<CanvasGuideLine[]>([])
+  const canvasGridStyle = computed<Record<string, string>>(() => ({
+    '--canvas-grid-size': `${gridSize.value}px`,
+    opacity: gridEnabled.value ? '1' : '0',
+  }))
   const clipboardWidgets = ref<LowCodeWidget[]>([])
-  const componentPanelWidth = ref(readPanelWidth('codeless-component-panel-width', 218, 170, 360))
-  const inspectorPanelWidth = ref(readPanelWidth('codeless-inspector-panel-width', 260, 220, 420))
+  const componentPanelWidth = ref(readDesignerPanelWidth('codeless-component-panel-width', 218, 170, 360))
+  const inspectorPanelWidth = ref(readDesignerPanelWidth('codeless-inspector-panel-width', 260, 220, 420))
   const panelResizeSide = ref<'component' | 'inspector' | ''>('')
   const draggingWidgetId = ref('')
   const draggingWidgetIds = ref<string[]>([])
@@ -112,17 +136,33 @@ export function useDesigner(
   const inlineEditingValue = ref('')
   const inlineEditingOriginalValue = ref('')
   const contextMenu = ref<DesignerContextMenuState>({ visible: false, x: 0, y: 0, targetId: '' })
-  let autoSaveTimer: number | null = null
-  let pendingHistoryBefore: PageLayout | null = null
   let inlineEditingHistoryIndex = -1
   let inlineEditingFutureStack: LayoutPatch[] | null = null
   let suppressNextWidgetClick = false
   let suppressNextCanvasClick = false
   let contextMenuAnchor = { x: 0, y: 0 }
   const dragThreshold = 3
+  const persistence = createDesignerPersistence({ saveProject })
+  const layoutModel = createDesignerLayoutModel({
+    getWidgets: () => currentProject.value?.layout.widgets || [],
+    getCanvas: () => currentProject.value?.layout.canvas,
+    getWidgetById: id => currentProject.value?.layout.widgets.find(widget => widget.id === id),
+  })
+  const history = createDesignerHistoryController(currentProject, historyOptions, {
+    onSelectionClear: () => clearSelection(),
+  })
+  const historyStack = history.historyStack
+  const futureStack = history.futureStack
+  const {
+    containerHeaderHeight,
+    styleDescriptionHeight,
+    containerContentBox,
+    containerBounds,
+    widgetMinimumSize,
+    clampWidgetFrame,
+    clampChildrenToParent,
+  } = layoutModel
 
-  const selectedWidgets = computed(() => currentProject.value?.layout.widgets.filter(widget => selectedWidgetIds.value.includes(widget.id)) || [])
-  const selectedWidget = computed(() => currentProject.value?.layout.widgets.find(widget => widget.id === selectedWidgetId.value))
   const canPaste = computed(() => clipboardWidgets.value.length > 0)
   const filteredGroups = computed(() => {
     const keyword = paletteSearch.value.trim().toLowerCase()
@@ -212,6 +252,18 @@ export function useDesigner(
     return visible
   })
 
+  const performance = createDesignerPerformanceModel({
+    currentProject,
+    visibleWidgetIds: canvasVisibleWidgetIds,
+    notify,
+  })
+  const largeProjectMode = performance.largeProjectMode
+  const webglAcceleration = performance.webglAcceleration
+  const webglSupported = performance.webglSupported
+  const webglWidgetIds = performance.webglWidgetIds
+  const webglWidgets = performance.webglWidgets
+  const performanceSummary = performance.performanceSummary
+
   const canvasRootWidgets = computed(() => (currentProject.value?.layout.widgets || [])
     .filter(widget => !widget.parentId && canvasVisibleWidgetIds.value.has(widget.id)))
   const canvasChildrenByParent = computed(() => {
@@ -239,32 +291,39 @@ export function useDesigner(
     if (value) void nextTick(updateCanvasViewport)
   }, { flush: 'post' })
 
+  watch(zoom, value => {
+    if (Math.abs(canvasViewport.zoom.value - value) > 0.001) canvasViewport.setZoom(value)
+    updateCanvasViewport()
+  })
+  watch(canvasViewport.zoom, value => {
+    if (Math.abs(zoom.value - value) > 0.001) zoom.value = value
+    updateCanvasViewport()
+  })
+  watch([canvasViewportRef, currentProject], ([viewport, project]) => {
+    if (!viewport || !project) return
+    void nextTick(() => {
+      canvasViewport.updateViewportSize()
+      if (canvasViewport.viewportSize.value.width > 0 && canvasViewport.viewportSize.value.height > 0) {
+        canvasViewport.fitPage()
+        updateCanvasViewport()
+      }
+    })
+  }, { flush: 'post' })
+
   watch(selectedWidgetId, id => {
     if (!id) selectedWidgetIds.value = []
     else if (!selectedWidgetIds.value.includes(id)) selectedWidgetIds.value = [id]
   })
   watch(currentProject, project => {
     project?.layout.widgets.forEach(normalizeWidget)
-    const validIds = new Set(project?.layout.widgets.map(widget => widget.id) || [])
-    selectedWidgetIds.value = selectedWidgetIds.value.filter(id => validIds.has(id))
-    if (selectedWidgetId.value && !validIds.has(selectedWidgetId.value)) selectedWidgetId.value = ''
+    history.syncHistoryBaseline()
+    selection.reconcile()
   }, { immediate: true })
 
   function selectWidget(id: string, additive = false) {
     if (!currentProject.value) return
     if (inlineEditingWidgetId.value && inlineEditingWidgetId.value !== id) commitInlineEdit()
-    if (additive) {
-      const alreadySelected = selectedWidgetIds.value.includes(id)
-      selectedWidgetIds.value = alreadySelected
-        ? selectedWidgetIds.value.filter(widgetId => widgetId !== id)
-        : [...selectedWidgetIds.value, id]
-      selectedWidgetId.value = alreadySelected
-        ? (selectedWidgetIds.value[selectedWidgetIds.value.length - 1] || '')
-        : id
-      return
-    }
-    selectedWidgetIds.value = [id]
-    selectedWidgetId.value = id
+    selection.selectWidget(id, additive)
   }
 
   function handleWidgetClick(id: string, event?: MouseEvent) {
@@ -350,59 +409,49 @@ export function useDesigner(
     suppressNextCanvasClick = false
     selectionBox.value = null
     if (inlineEditingWidgetId.value) commitInlineEdit()
-    selectedWidgetId.value = ''
-    selectedWidgetIds.value = []
+    selection.clear()
   }
 
-  function finalizePendingHistory() {
-    if (!pendingHistoryBefore || !currentProject.value) return
-    const before = pendingHistoryBefore
-    pendingHistoryBefore = null
-    const patch = createLayoutPatch(before, currentProject.value.layout)
-    if (!patch) return
-    historyStack.value.push(patch)
-    if (historyStack.value.length > 40) historyStack.value.shift()
-  }
   function discardPendingHistory() {
-    pendingHistoryBefore = null
+    history.discardPendingHistory()
   }
-  function markDirty() {
-    finalizePendingHistory()
+
+  function beginExternalHistory() {
+    history.beginExternalHistory()
+  }
+
+  function markDirty(options: { preserveHistory?: boolean } = {}) {
+    history.recordDirty(options)
     dirty.value = true
-    if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer)
-    autoSaveTimer = window.setTimeout(() => {
-      autoSaveTimer = null
-      if (dirty.value) void saveProject("自动保存")
-    }, 1200)
+    persistence.schedule(history.flushHistory, () => dirty.value)
   }
+
   function clearAutoSaveTimer() {
-    if (autoSaveTimer === null) return
-    window.clearTimeout(autoSaveTimer)
-    autoSaveTimer = null
+    persistence.clear()
   }
+
+  function flushHistory() {
+    history.flushHistory()
+  }
+
+  function clearFutureHistory() {
+    history.clearFutureHistory()
+  }
+
+  function syncHistoryBaseline() {
+    history.syncHistoryBaseline()
+  }
+
   function pushHistory() {
-    if (!currentProject.value) return
-    if (pendingHistoryBefore) finalizePendingHistory()
-    pendingHistoryBefore = clone(currentProject.value.layout)
-    futureStack.value = []
+    history.pushHistory()
   }
+
   function undo() {
-    if (!currentProject.value || !historyStack.value.length) return
-    const patch = historyStack.value.pop()!
-    futureStack.value.push(patch)
-    currentProject.value.layout = applyLayoutPatch(currentProject.value.layout, patch, "undo")
-    currentProject.value.layout.widgets.forEach(normalizeWidget)
-    clearSelection()
-    markDirty()
+    if (history.undo()) markDirty()
   }
+
   function redo() {
-    if (!currentProject.value || !futureStack.value.length) return
-    const patch = futureStack.value.pop()!
-    historyStack.value.push(patch)
-    currentProject.value.layout = applyLayoutPatch(currentProject.value.layout, patch, "redo")
-    currentProject.value.layout.widgets.forEach(normalizeWidget)
-    clearSelection()
-    markDirty()
+    if (history.redo()) markDirty()
   }
   function canDropIntoContainer(id: string, movingIds: string[] = []) {
     const container = widgetById(id)
@@ -460,90 +509,6 @@ export function useDesigner(
       cursor = byId.get(cursor.parentId)
     }
     return false
-  }
-
-  /** Return the local content box used by both editor and runtime. */
-  function containerHeaderHeight(parent: LowCodeWidget) {
-    if (parent.type === 'drawer') return getWidgetConfig(parent).content.description ? 58 : 38
-    if (!['card', 'frame', 'stack', 'grid'].includes(parent.type)) return 0
-    const content = getWidgetConfig(parent).content
-    if (!content.title && !content.description) return 0
-    return content.description ? 48 : 28
-  }
-
-  function styleDescriptionHeight(parent: LowCodeWidget) {
-    return getWidgetConfig(parent).content.description ? 18 : 0
-  }
-
-  function containerContentBox(parentId?: string) {
-    const parent = parentId ? widgetById(parentId) : undefined
-    if (!parent) {
-      return {
-        x: 0,
-        y: 0,
-        width: currentProject.value?.layout.canvas.width || 960,
-        height: currentProject.value?.layout.canvas.height || 720,
-      }
-    }
-    const frame = getWidgetConfig(parent).layout
-    const style = getWidgetConfig(parent).style
-    if (parent.type === 'modal') {
-      const descriptionHeight = styleDescriptionHeight(parent)
-      const top = 12 + 28 + descriptionHeight
-      const reservedBottom = 12 + 30 + 12
-      return {
-        x: 12,
-        y: top,
-        width: Math.max(24, frame.width - 24),
-        height: Math.max(24, frame.height - top - reservedBottom),
-      }
-    }
-    const padding = Math.max(parent.type === 'drawer' ? 8 : 0, Number(style.padding) || (parent.type === 'drawer' ? 16 : 0))
-    const headerHeight = containerHeaderHeight(parent)
-    if (parent.type === 'loading') return { x: 0, y: 0, width: frame.width, height: frame.height }
-    return {
-      x: padding,
-      y: padding + headerHeight,
-      width: Math.max(24, frame.width - padding * 2),
-      height: Math.max(24, frame.height - padding * 2 - headerHeight),
-    }
-  }
-
-  function containerBounds(parentId?: string) {
-    const box = containerContentBox(parentId)
-    return { width: box.width, height: box.height }
-  }
-
-  function widgetMinimumSize(widget: LowCodeWidget) {
-    if (widget.type === 'modal') return { width: 240, height: 180 }
-    if (widget.type === 'loading') return { width: 180, height: 72 }
-    return { width: 24, height: 24 }
-  }
-
-  function clampChildrenToParent(parent: LowCodeWidget) {
-    const children = currentProject.value?.layout.widgets.filter(widget => widget.parentId === parent.id) || []
-    children.forEach(child => {
-      const frame = getWidgetConfig(child).layout
-      const next = clampWidgetFrame(child, frame.x, frame.y, frame.width, frame.height)
-      setWidgetFrame(child, next)
-      clampChildrenToParent(child)
-    })
-  }
-
-  function clampWidgetFrame(widget: LowCodeWidget, x: number, y: number, width?: number, height?: number) {
-    const frame = getWidgetConfig(widget).layout
-    const bounds = containerBounds(widget.parentId)
-    const minimum = widgetMinimumSize(widget)
-    const minWidth = Math.min(bounds.width, minimum.width)
-    const minHeight = Math.min(bounds.height, minimum.height)
-    const nextWidth = Math.max(minWidth, Math.min(bounds.width, width ?? frame.width))
-    const nextHeight = Math.max(minHeight, Math.min(bounds.height, height ?? frame.height))
-    return {
-      x: Math.max(0, Math.min(Math.max(0, bounds.width - nextWidth), Math.round(x))),
-      y: Math.max(0, Math.min(Math.max(0, bounds.height - nextHeight), Math.round(y))),
-      width: nextWidth,
-      height: nextHeight,
-    }
   }
 
   function addWidget(type: WidgetType, x?: number, y?: number, parentId?: string) {
@@ -686,12 +651,74 @@ export function useDesigner(
     markDirty()
   }
 
+  function zoomBy(factor: number) {
+    if (!Number.isFinite(factor) || factor <= 0) return zoom.value
+    const nextZoom = canvasViewport.setZoom(zoom.value * factor)
+    updateCanvasViewport()
+    return nextZoom
+  }
+
+  function fitCanvas(mode: 'page' | 'selection' = 'page') {
+    canvasViewport.updateViewportSize()
+    if (mode === 'selection' && selectedWidgets.value.length) {
+      const rects = selectedWidgets.value.map(widget => {
+        const position = absolutePosition(widget)
+        const frame = layoutModel.renderedWidgetFrame(widget)
+        return { x: position.x, y: position.y, right: position.x + frame.width, bottom: position.y + frame.height }
+      })
+      if (rects.length) {
+        const left = Math.min(...rects.map(rect => rect.x))
+        const top = Math.min(...rects.map(rect => rect.y))
+        const right = Math.max(...rects.map(rect => rect.right))
+        const bottom = Math.max(...rects.map(rect => rect.bottom))
+        const fitted = canvasViewport.fitSelection({
+          x: left,
+          y: top,
+          width: Math.max(1, right - left),
+          height: Math.max(1, bottom - top),
+        })
+        if (fitted) {
+          updateCanvasViewport()
+          return true
+        }
+      }
+    }
+    const fitted = canvasViewport.fitPage()
+    if (fitted) updateCanvasViewport()
+    return fitted
+  }
+
   function handleCanvasWheel(event: WheelEvent) {
-    if (!event.ctrlKey && !event.metaKey) return
-    event.preventDefault()
-    const nextZoom = Math.max(0.25, Math.min(2, zoom.value * (event.deltaY > 0 ? 0.92 : 1.08)))
-    if (nextZoom === zoom.value) return
-    zoom.value = Number(nextZoom.toFixed(2))
+    canvasViewport.handleWheel(event)
+    updateCanvasViewport()
+  }
+
+  function handleCanvasPanPointerDown(event: PointerEvent, force = false) {
+    if (force) canvasViewport.startPan(event)
+    else canvasViewport.handlePointerDown(event)
+  }
+
+  function handleCanvasPanPointerMove(event: PointerEvent) {
+    canvasViewport.handlePointerMove(event)
+    updateCanvasViewport()
+  }
+
+  function handleCanvasPanPointerUp(event: PointerEvent) {
+    canvasViewport.handlePointerUp(event)
+    updateCanvasViewport()
+  }
+
+  function handleCanvasPanPointerCancel(event: PointerEvent) {
+    canvasViewport.handlePointerCancel(event)
+    updateCanvasViewport()
+  }
+
+  function handleCanvasViewportKeydown(event: KeyboardEvent) {
+    canvasViewport.handleKeydown(event)
+  }
+
+  function handleCanvasViewportKeyup(event: KeyboardEvent) {
+    canvasViewport.handleKeyup(event)
   }
 
   function absolutePosition(widget: LowCodeWidget) {
@@ -711,6 +738,73 @@ export function useDesigner(
     }
     return { x, y }
   }
+
+  function guideFrameForWidget(widget: LowCodeWidget): CanvasGuideFrame {
+    const position = absolutePosition(widget)
+    const frame = layoutModel.renderedWidgetFrame(widget)
+    const layout = getWidgetConfig(widget).layout
+    return {
+      id: widget.id,
+      parentId: widget.parentId,
+      x: position.x,
+      y: position.y,
+      width: Math.max(1, frame.width || layout.width),
+      height: Math.max(1, frame.height || layout.height),
+      rotation: layout.rotation,
+      locked: layout.locked,
+      hidden: layout.hidden,
+    }
+  }
+
+  function absoluteParentOrigin(widget: LowCodeWidget) {
+    if (!widget.parentId) return { x: 0, y: 0 }
+    const parent = widgetById(widget.parentId)
+    if (!parent) return { x: 0, y: 0 }
+    const parentPosition = absolutePosition(parent)
+    const content = containerContentBox(parent.id)
+    return { x: parentPosition.x + content.x, y: parentPosition.y + content.y }
+  }
+
+  function applyAbsoluteFrameResults(widgets: LowCodeWidget[], results: CanvasGuideFrame[]) {
+    const resultById = new Map(results.map(frame => [frame.id, frame]))
+    const updates = widgets.flatMap(widget => {
+      const result = resultById.get(widget.id)
+      if (!result) return []
+      const origin = absoluteParentOrigin(widget)
+      const next = clampWidgetFrame(widget, result.x - origin.x, result.y - origin.y)
+      return [{ widget, patch: { x: next.x, y: next.y } }]
+    })
+    if (!updates.length) return false
+    pushHistory()
+    applyWidgetFrameBatch(updates)
+    markDirty()
+    return true
+  }
+
+  function selectedLayoutWidgets() {
+    const ids = new Set(selectedWidgetIds.value)
+    return selectedWidgets.value.filter(widget => !isWidgetLocked(widget)
+      && !Array.from(ids).some(id => id !== widget.id && isDescendantOf(widget.id, id)))
+  }
+
+  function alignSelectedWidgets(alignment: 'left' | 'centerX' | 'right' | 'top' | 'centerY' | 'bottom') {
+    const widgets = selectedLayoutWidgets()
+    if (widgets.length < 2) return
+    const frames = widgets.map(guideFrameForWidget)
+    const normalized = alignment === 'centerX' ? 'center' : alignment === 'centerY' ? 'middle' : alignment
+    const results = alignFrames(frames, normalized, {})
+    if (applyAbsoluteFrameResults(widgets, results)) notify('\u5df2\u5b8c\u6210\u591a\u9009\u5bf9\u9f50', 'success')
+  }
+
+  function distributeSelectedWidgets(axis: 'x' | 'y') {
+    const widgets = selectedLayoutWidgets()
+    if (widgets.length < 3) return
+    const results = distributeFrames(widgets.map(guideFrameForWidget), axis, { preserveOuterBounds: true })
+    if (applyAbsoluteFrameResults(widgets, results)) notify(axis === 'x' ? '\u5df2\u5b8c\u6210\u6c34\u5e73\u7b49\u95f4\u8ddd' : '\u5df2\u5b8c\u6210\u5782\u76f4\u7b49\u95f4\u8ddd', 'success')
+  }
+
+  function toggleCanvasGrid() { gridEnabled.value = !gridEnabled.value }
+  function toggleCanvasSnap() { snapEnabled.value = !snapEnabled.value; if (!snapEnabled.value) canvasGuideLines.value = [] }
 
   function normalizeSiblingZIndexes(parentId?: string) {
     const siblings = (currentProject.value?.layout.widgets || [])
@@ -885,12 +979,12 @@ export function useDesigner(
     suppressNextCanvasClick = true
     selectionBox.value = { x: left, y: top, width, height }
 
-    const selected = currentProject.value.layout.widgets.filter(widget => {
-      const frame = getWidgetConfig(widget).layout
-      const absolute = absolutePosition(widget)
-      return absolute.x < left + width && absolute.x + frame.width > left
-        && absolute.y < top + height && absolute.y + frame.height > top
-    }).map(widget => widget.id)
+    const selected = selectWidgetsInRect(
+      currentProject.value.layout.widgets,
+      { x: left, y: top, width, height },
+      absolutePosition,
+      widget => getWidgetConfig(widget).layout,
+    )
     const nextIds = state.additive
       ? Array.from(new Set([...selectedWidgetIds.value, ...selected]))
       : selected
@@ -962,15 +1056,15 @@ export function useDesigner(
   function resizePanels(event: PointerEvent) {
     if (!panelResizeState) return
     const delta = event.clientX - panelResizeState.startX
-    const { min, max } = panelWidthLimits(panelResizeState.side)
+    const { min, max } = designerPanelWidthLimits(panelResizeState.side)
     const next = Math.round(Math.max(min, Math.min(max, panelResizeState.startWidth + (panelResizeState.side === 'component' ? delta : -delta))))
     if (panelResizeState.side === 'component') componentPanelWidth.value = next
     else inspectorPanelWidth.value = next
   }
 
   function clampPanelWidths() {
-    const componentLimits = panelWidthLimits('component')
-    const inspectorLimits = panelWidthLimits('inspector')
+    const componentLimits = designerPanelWidthLimits('component')
+    const inspectorLimits = designerPanelWidthLimits('inspector')
     componentPanelWidth.value = Math.max(componentLimits.min, Math.min(componentLimits.max, componentPanelWidth.value))
     inspectorPanelWidth.value = Math.max(inspectorLimits.min, Math.min(inspectorLimits.max, inspectorPanelWidth.value))
   }
@@ -978,8 +1072,8 @@ export function useDesigner(
   function stopPanelResize() {
     window.removeEventListener('pointermove', resizePanels)
     window.removeEventListener('pointercancel', stopPanelResize)
-    if (panelResizeState?.side === 'component') savePanelWidth('codeless-component-panel-width', componentPanelWidth.value)
-    if (panelResizeState?.side === 'inspector') savePanelWidth('codeless-inspector-panel-width', inspectorPanelWidth.value)
+    if (panelResizeState?.side === 'component') saveDesignerPanelWidth('codeless-component-panel-width', componentPanelWidth.value)
+    if (panelResizeState?.side === 'inspector') saveDesignerPanelWidth('codeless-inspector-panel-width', inspectorPanelWidth.value)
     panelResizeState = null
     panelResizeSide.value = ''
     document.body.style.userSelect = ''
@@ -1098,10 +1192,43 @@ export function useDesigner(
     const requestedDy = Math.round(dy)
     const visualDx = Math.max(minDx, Math.min(maxDx, requestedDx))
     const visualDy = Math.max(minDy, Math.min(maxDy, requestedDy))
-    state.deltaX = Math.round(visualDx)
-    state.deltaY = Math.round(visualDy)
+    let finalDx = visualDx
+    let finalDy = visualDy
+    let activeGuides: CanvasGuideLine[] = []
+    if (snapEnabled.value && !event.altKey) {
+      const movingFrames = state.widgets.map(({ widget, originAbsoluteX, originAbsoluteY }) => {
+        const frame = getWidgetConfig(widget).layout
+        return { id: widget.id, parentId: widget.parentId, x: originAbsoluteX, y: originAbsoluteY, width: frame.width, height: frame.height }
+      })
+      const movingBounds = getCanvasGuideBounds(movingFrames)
+      if (movingBounds) {
+        const movingIds = new Set(state.widgets.map(item => item.widget.id))
+        const referenceFrames = (currentProject.value.layout.widgets || [])
+          .filter(widget => !movingIds.has(widget.id) && !state.widgets.some(item => isDescendantOf(widget.id, item.widget.id)))
+          .map(widget => guideFrameForWidget(widget))
+        const snap = smartSnapFrame({
+          id: '__moving-selection__',
+          x: movingBounds.x + visualDx,
+          y: movingBounds.y + visualDy,
+          width: movingBounds.width,
+          height: movingBounds.height,
+        }, {
+          referenceFrames,
+          canvas: { x: 0, y: 0, width: currentProject.value.layout.canvas.width, height: currentProject.value.layout.canvas.height },
+          gridSize: gridEnabled.value ? gridSize.value : undefined,
+          threshold: 6,
+          excludeIds: ['__moving-selection__'],
+        })
+        finalDx = Math.max(minDx, Math.min(maxDx, Math.round(snap.frame.x - movingBounds.x)))
+        finalDy = Math.max(minDy, Math.min(maxDy, Math.round(snap.frame.y - movingBounds.y)))
+        activeGuides = snap.guides
+      }
+    }
+    state.deltaX = Math.round(finalDx)
+    state.deltaY = Math.round(finalDy)
+    canvasGuideLines.value = showCanvasGuides.value ? activeGuides : []
     applyWidgetFrameBatch(state.widgets.map(({ widget, originX, originY }) => {
-      const next = clampWidgetFrame(widget, originX + visualDx, originY + visualDy)
+      const next = clampWidgetFrame(widget, originX + finalDx, originY + finalDy)
       return { widget, patch: { x: next.x, y: next.y } }
     }))
     dropTargetContainerId.value = containerAtPoint(event, state.widgets.map(item => item.widget.id))
@@ -1206,6 +1333,7 @@ export function useDesigner(
       draggingWidgetId.value = ''
       draggingWidgetIds.value = []
       dropTargetContainerId.value = ''
+      canvasGuideLines.value = []
       setPointerInteractionActive(false)
       moveState = null
       pendingMoveEvent = null
@@ -1630,7 +1758,8 @@ export function useDesigner(
   function syncWidget(widget: LowCodeWidget | undefined) {
     if (!widget) return
     normalizeWidget(widget)
-    markDirty()
+    beginExternalHistory()
+    markDirty({ preserveHistory: true })
   }
 
   function updateWidgetVariant(event: Event) {
@@ -1641,7 +1770,7 @@ export function useDesigner(
     config.variant = value || undefined
     config.content.variant = value || undefined
     syncLegacyProps(widget)
-    markDirty()
+    syncWidget(widget)
   }
 
   function updateWidgetTokenRef(key: keyof WidgetStyleTokenRefs, event: Event) {
@@ -1654,7 +1783,7 @@ export function useDesigner(
     else delete config.style.tokenRefs[key]
     config.meta.updatedAt = new Date().toISOString()
     syncLegacyProps(widget)
-    markDirty()
+    syncWidget(widget)
   }
 
   function updateDataSource(widget: LowCodeWidget, event: Event) {
@@ -1663,7 +1792,7 @@ export function useDesigner(
     if (!table) config.data = { source: 'static' }
     else config.data = { ...config.data, source: 'table', table, mode: config.data.mode || 'list' }
     syncLegacyProps(widget)
-    markDirty()
+    syncWidget(widget)
   }
 
   function updateSubmitTarget(widget: LowCodeWidget, event: Event) {
@@ -1671,14 +1800,14 @@ export function useDesigner(
     const config = getWidgetConfig(widget)
     config.submitTo = table ? { table } : undefined
     syncLegacyProps(widget)
-    markDirty()
+    syncWidget(widget)
   }
   function updateColumns(event: Event) {
     if (!selectedWidget.value) return
     const text = (event.target as HTMLTextAreaElement).value
     getWidgetConfig(selectedWidget.value).content.columns = parseColumns(text)
     syncLegacyProps(selectedWidget.value)
-    markDirty()
+    syncWidget(selectedWidget.value)
   }
 
   function updateOptions(event: Event) {
@@ -1686,15 +1815,35 @@ export function useDesigner(
     const text = (event.target as HTMLTextAreaElement).value
     getWidgetConfig(selectedWidget.value).content.options = parseOptions(text)
     syncLegacyProps(selectedWidget.value)
-    markDirty()
+    syncWidget(selectedWidget.value)
   }
 
   function serializeWidgetColumns(widget: LowCodeWidget) { return serializeColumns(getWidgetConfig(widget).content.columns) }
   function serializeWidgetOptions(widget: LowCodeWidget) { return serializeOptions(getWidgetConfig(widget).content.options) }
 
+  function isWebGLWidget(widget: LowCodeWidget) {
+    return performance.isWebGLWidget(widget, selectedWidgetIds, isInlineEditing)
+  }
+
+  function setWebGLSupported(value: boolean) {
+    performance.setWebGLSupported(value)
+  }
+
+  function toggleWebGLAcceleration() {
+    if (!largeProjectMode.value) {
+      notify('\u5927\u9879\u76ee\u4e2d WebGL \u4e0d\u53ef\u7528\uff0c\u5df2\u4fdd\u7559 DOM \u6e32\u67d3', 'info')
+      return
+    }
+    const enabled = performance.toggleWebGLAcceleration()
+    notify(enabled ? '\u5df2\u5f00\u542f WebGL \u5c40\u90e8\u52a0\u901f' : '\u5df2\u5173\u95ed WebGL \u5c40\u90e8\u52a0\u901f', 'info')
+  }
+
+  function webglWidgetFrame(widget: LowCodeWidget) {
+    return performance.webglWidgetFrame(widget)
+  }
+
   function widgetStyle(widget: LowCodeWidget) {
-    const widgets = currentProject.value?.layout.widgets || []
-    const frame = getRenderedWidgetFrame(widget, widgets)
+    const frame = layoutModel.renderedWidgetFrame(widget)
     return {
       left: `${frame.x}px`,
       top: `${frame.y}px`,
@@ -1751,12 +1900,11 @@ export function useDesigner(
     markDirty()
   }
 
-  function resetDesigner() {
-    clearAutoSaveTimer()
+  function resetDesigner(options: DesignerResetOptions = {}) {
+    // The history controller owns onLayoutHistoryReset/onHistoryPruned collaboration callbacks.
+    persistence.clear()
+    history.reset(options)
     clearSelection()
-    discardPendingHistory()
-    historyStack.value = []
-    futureStack.value = []
     clipboardWidgets.value = []
     dirty.value = false
   }
@@ -1808,12 +1956,12 @@ export function useDesigner(
     }
     if (!editing && command && event.key.toLowerCase() === 'z') {
       event.preventDefault()
-      event.shiftKey ? redo() : undo()
+      event.shiftKey ? (historyOptions.onRedo?.() || redo()) : (historyOptions.onUndo?.() || undo())
       return
     }
     if (!editing && command && event.key.toLowerCase() === 'y') {
       event.preventDefault()
-      redo()
+      historyOptions.onRedo?.() || redo()
       return
     }
     if (!editing && command && event.key.toLowerCase() === 'c') {
@@ -1839,6 +1987,16 @@ export function useDesigner(
     if (!editing && command && event.key.toLowerCase() === 'a') {
       event.preventDefault()
       selectAllWidgets()
+      return
+    }
+    if (!editing && event.shiftKey && event.key === '1') {
+      event.preventDefault()
+      fitCanvas('page')
+      return
+    }
+    if (!editing && event.shiftKey && event.key === '2') {
+      event.preventDefault()
+      fitCanvas('selection')
       return
     }
     if (!editing && event.key === 'Escape') {
@@ -1897,6 +2055,7 @@ export function useDesigner(
     window.removeEventListener('pointermove', queueResizeWidget)
     window.removeEventListener('pointercancel', stopWidgetResize)
     clearAutoSaveTimer()
+    history.dispose()
     stopCanvasSelection({ type: 'pointercancel' } as PointerEvent)
     stopWidgetMove()
     stopWidgetResize()
@@ -1905,13 +2064,17 @@ export function useDesigner(
 
   return {
     isWidgetLocked, isWidgetSelfLocked,
-    selectedWidgetId, selectedWidgetIds, selectedWidgets, paletteSearch, paletteTab, inspectorTab, zoom, dirty, canvasRef, canvasViewportRef, canvasRootWidgets, canvasChildrenFor, updateCanvasViewport, historyStack, futureStack,
-    markDirty,
+    selectedWidgetId, selectedWidgetIds, selectedWidgets, paletteSearch, paletteTab, inspectorTab, zoom, dirty, canvasRef, canvasViewportRef, canvasViewport, canvasRootWidgets, canvasChildrenFor, canvasVisibleWidgetIds, updateCanvasViewport, historyStack, futureStack,
+    gridEnabled, snapEnabled, showCanvasGuides, gridSize, canvasGuideLines, canvasGridStyle,
+    largeProjectMode, webglAcceleration, webglSupported, webglWidgetIds, webglWidgets, performanceSummary, isWebGLWidget, setWebGLSupported, toggleWebGLAcceleration, webglWidgetFrame,
+    markDirty, flushHistory, clearFutureHistory, beginExternalHistory, syncHistoryBaseline,
     selectedWidget, filteredGroups, layerWidgets, componentPanelWidth, inspectorPanelWidth, panelResizeSide, draggingWidgetId, draggingWidgetIds, dropTargetContainerId, selectionBox, setDropTargetContainer,
     inlineEditingWidgetId, inlineEditingField, inlineEditingValue, isInlineEditing, startInlineEdit, commitInlineEdit, cancelInlineEdit,
+    zoomBy, fitCanvas,
     pushHistory, undo, redo, selectWidget, handleWidgetClick, handleWidgetContextMenu, handleCanvasContextMenu, closeContextMenu, repositionContextMenu, contextMenu, canPaste, clearSelection, canDropIntoContainer, startPaletteDrag, addWidget, onCanvasDrop, handleCanvasWheel, moveLayerToIndex, reorderWidgetsByLayer, reparentWidget,
-    startPanelResize, startCanvasSelection, handleCanvasClick, insertWidgets,
+    startPanelResize, startCanvasSelection, handleCanvasClick, insertWidgets, handleCanvasPanPointerDown, handleCanvasPanPointerMove, handleCanvasPanPointerUp, handleCanvasPanPointerCancel, handleCanvasViewportKeydown, handleCanvasViewportKeyup,
     startWidgetMove, startWidgetResize, removeSelectedWidget, duplicateSelectedWidget, copySelectedWidgets, cutSelectedWidgets, pasteWidgets, renameSelectedWidget, selectAllWidgets, bringToFront, sendToBack, moveSelectedLayer, canMoveSelectedLayer,
+    alignSelectedWidgets, distributeSelectedWidgets, toggleCanvasGrid, toggleCanvasSnap,
     toggleSelectedLocked, toggleSelectedHidden, syncWidget, updateWidgetVariant, updateWidgetTokenRef, updateDataSource, updateSubmitTarget, updateColumns, updateOptions, serializeWidgetColumns, serializeWidgetOptions, widgetStyle, resetDesigner,
     addWidgetEvent, removeWidgetEvent, addEventAction, removeEventAction,
   }

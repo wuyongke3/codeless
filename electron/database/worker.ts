@@ -468,7 +468,8 @@ function send(response: DatabaseResponse) {
 }
 
 parentPort.on('message', (message: unknown) => {
-  const request = message as DatabaseRequest
+  const event = message as { data?: unknown }
+  const request = (event && typeof event === 'object' && 'data' in event ? event.data : message) as DatabaseRequest
   if (!request || typeof request.id !== 'number' || typeof request.method !== 'string') return
   try {
     const result = dispatch(request.method, Array.isArray(request.args) ? request.args : [])

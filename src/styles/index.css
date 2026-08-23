@@ -1,4 +1,4 @@
-﻿@import './app.css';
+@import './app.css';
 @import './workspace.css';
 @import './builder.css';
 @import './widget.css';
@@ -12,3 +12,16 @@
 
 @import './plugins.css';
 
+
+@import './collaboration.css';
+
+@import './modules.css';
+
+
+@import './route-navigation.css';
+
+@import './command-palette.css';
+
+@import './designer-canvas-viewport.css';
+
+@import './token-manager.css';

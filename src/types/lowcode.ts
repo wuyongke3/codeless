@@ -43,14 +43,21 @@ export type WidgetValueType = 'text' | 'number' | 'email' | 'phone' | 'date' | '
 export type WidgetImageFit = 'cover' | 'contain' | 'fill' | 'none'
 export type WidgetAggregateFunction = 'count' | 'sum' | 'avg' | 'min' | 'max'
 export type DesignTokenPrimitive = string | number
+export type DesignTokenValue = DesignTokenPrimitive | boolean
 export type DesignThemeMode = 'light' | 'dark'
 
 export interface DesignTokenSet {
+  /** Existing buckets kept stable for Builder/WidgetConfig compatibility. */
   colors: Record<string, string>
   typography: Record<string, DesignTokenPrimitive>
   spacing: Record<string, number>
   radii: Record<string, number>
   shadows: Record<string, string>
+  /** Semantic text and boolean buckets introduced by the token domain API. */
+  texts?: Record<string, string>
+  booleans?: Record<string, boolean>
+  /** Escape hatch for project-local token kinds that are still JSON values. */
+  custom?: Record<string, DesignTokenValue>
 }
 
 export interface DesignTheme {
@@ -58,6 +65,10 @@ export interface DesignTheme {
   name: string
   mode: DesignThemeMode
   tokens: DesignTokenSet
+  /** Canonical token reference -> canonical token reference, e.g. color.brand -> color.primary. */
+  aliases?: Record<string, string>
+  /** Canonical references intentionally removed from the built-in fallback set. */
+  removedTokens?: Record<string, boolean>
 }
 
 /** Local project-level themes and design tokens persisted in .codeless / SQLite JSON. */
@@ -365,14 +376,17 @@ export interface LowCodeWidget {
   /** 父容器组件 ID；为空表示页面根层。支持指向可嵌套容器组件，例如 modal、loading、card、frame、stack、grid、drawer。 */
   parentId?: string
   name: string
-  /** 旧版布局字段，保存时继续保留，读取时与 config.layout 同步。 */
-  x: number
-  y: number
-  w: number
-  h: number
-  /** 旧版扁平 props，供已有项目和插件兼容。 */
-  props: WidgetProps
-  /** v1 统一组件协议。 */
+  /** @deprecated Read-only legacy layout projection; import/normalize may
+   * read them to create WidgetConfig v1, but editor mutations must target config.layout.
+   */
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+  /** @deprecated Read-only legacy props projection; new component
+   * properties belong in WidgetConfig.content/style/data/validation/interaction.
+   */
+  readonly props: WidgetProps
   config?: WidgetConfig
 }
 
@@ -546,4 +560,5 @@ export interface LowCodeApi {
   removePlugin: (id: string) => Promise<{ success: boolean }>
   setPluginEnabled: (id: string, enabled: boolean) => Promise<InstalledPlugin>
   getPluginUiUrl: (id: string) => Promise<string | null>
+  collaboration: import('./collaboration').CollaborationApi
 }

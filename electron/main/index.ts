@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, session, shell, webContents, type IpcMainInvokeEvent } from 'electron'
 import { mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
@@ -9,6 +9,8 @@ import { createCodelessDocument, parseCodelessDocument, serializeCodelessDocumen
 import { parseDesignExchangeDocument, serializeDesignExchangeDocument } from '../../src/types/designExchange'
 import { DatabaseClient } from '../database/client'
 import { PluginRegistry } from '../plugins/registry'
+import { CollaborationHub } from '../collaboration/hub'
+import type { CollaborationCreateInput, CollaborationJoinInput } from '../../src/types/collaboration'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -27,9 +29,12 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let win: BrowserWindow | null = null
+const windows = new Set<BrowserWindow>()
+let collaborationHub: CollaborationHub | null = null
 let databaseClient: DatabaseClient | null = null
 let pluginRegistry: PluginRegistry | null = null
 let databasePath = ''
+let isQuitting = false
 
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
@@ -116,6 +121,11 @@ function getDatabaseClient() {
   return databaseClient
 }
 
+function getCollaborationHub() {
+  if (!collaborationHub) throw new Error('协作模块尚未初始化')
+  return collaborationHub
+}
+
 function getPluginRegistry() {
   if (!pluginRegistry) throw new Error('本地插件注册表尚未初始化')
   return pluginRegistry
@@ -163,6 +173,38 @@ function assertTrustedSender(event: IpcMainInvokeEvent) {
   if (!isTrustedAppUrl(senderUrl)) {
     throw new Error('Blocked IPC request from an untrusted frame')
   }
+}
+
+function registerCollaborationHandlers() {
+  ipcMain.handle('lowcode:collaboration-create', (event, input: CollaborationCreateInput) => {
+    assertTrustedSender(event)
+    return getCollaborationHub().createSession(event.sender, input)
+  })
+  ipcMain.handle('lowcode:collaboration-join', (event, input: CollaborationJoinInput) => {
+    assertTrustedSender(event)
+    return getCollaborationHub().joinSession(event.sender, input)
+  })
+  ipcMain.handle('lowcode:collaboration-get', (event) => {
+    assertTrustedSender(event)
+    return getCollaborationHub().getSession(event.sender)
+  })
+  ipcMain.handle('lowcode:collaboration-publish', async (event, project: LowCodeProject) => {
+    assertTrustedSender(event)
+    await getCollaborationHub().publishProject(event.sender, project)
+    return { success: true }
+  })
+  ipcMain.handle('lowcode:collaboration-leave', async (event) => {
+    assertTrustedSender(event)
+    await getCollaborationHub().leave(event.sender)
+    return { success: true }
+  })
+  ipcMain.handle('lowcode:collaboration-open-window', async (event) => {
+    assertTrustedSender(event)
+    const session = getCollaborationHub().getSession(event.sender)
+    if (!session || session.mode !== 'same-device') throw new Error('当前会话不支持同机多窗口')
+    await createWindow(session.id)
+    return { success: true }
+  })
 }
 
 function registerIpcHandlers() {
@@ -362,8 +404,8 @@ function registerIpcHandlers() {
   })
 }
 
-async function createWindow() {
-  win = new BrowserWindow({
+async function createWindow(sessionId?: string) {
+  const createdWindow = new BrowserWindow({
     title: 'Codeless - Local Prototyping Tool',
     icon: appIcon,
     width: 1520,
@@ -382,26 +424,35 @@ async function createWindow() {
     },
   })
 
-  win.webContents.on('will-navigate', (event, url) => {
+  const createdWebContents = createdWindow.webContents
+  windows.add(createdWindow)
+  if (!win) win = createdWindow
+  createdWindow.webContents.on('will-navigate', (event, url) => {
     if (isTrustedAppUrl(url)) return
     event.preventDefault()
     if (url.startsWith('https://')) void shell.openExternal(url)
   })
 
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  createdWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) void shell.openExternal(url)
     return { action: 'deny' }
   })
 
-  win.once('ready-to-show', () => {
-    if (!isSmokeTest) win?.show()
+  createdWindow.once('ready-to-show', () => {
+    if (!isSmokeTest) createdWindow.show()
   })
-  if (VITE_DEV_SERVER_URL) await win.loadURL(VITE_DEV_SERVER_URL)
-  else await win.loadFile(indexHtml)
+  createdWindow.on('closed', () => {
+    windows.delete(createdWindow)
+    collaborationHub?.detachWindow(createdWebContents.id)
+    if (win === createdWindow) win = windows.values().next().value || null
+  })
+  if (VITE_DEV_SERVER_URL) await createdWindow.loadURL(VITE_DEV_SERVER_URL)
+  else await createdWindow.loadFile(indexHtml)
+  if (sessionId) void getCollaborationHub().attachWindow(createdWebContents, sessionId)
 
   if (isSmokeTest) {
     console.log('CODELESS_SMOKE_OK')
-    setTimeout(() => app.quit(), 800)
+    setTimeout(() => app.quit(), 1_500)
   }
 
 }
@@ -412,13 +463,27 @@ app.whenReady().then(async () => {
   await pluginRegistry.ensureDirectory()
   configureOfflineSession()
   registerIpcHandlers()
+  collaborationHub = new CollaborationHub((webContentsId, event) => {
+    const contents = webContents.fromId(webContentsId)
+    if (contents && !contents.isDestroyed()) contents.send('lowcode:collaboration-event', event)
+  })
+  registerCollaborationHandlers()
   await createWindow()
 })
 
-app.on('before-quit', () => {
-  databaseClient?.close()
+app.on('before-quit', event => {
+  if (isQuitting) return
+  event.preventDefault()
+  isQuitting = true
+  const client = databaseClient
+  const hub = collaborationHub
   databaseClient = null
   pluginRegistry = null
+  collaborationHub = null
+  void Promise.all([hub?.close(), client?.close()]).finally(() => {
+    windows.clear()
+    app.quit()
+  })
 })
 
 app.on('window-all-closed', () => {

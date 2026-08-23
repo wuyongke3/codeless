@@ -1,7 +1,22 @@
-import { ipcRenderer, contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
+import type { CollaborationApi, CollaborationCreateInput, CollaborationEvent, CollaborationJoinInput } from '../../src/types/collaboration'
 import type { DataQueryOptions, LocalAssetImportResult, LowCodeProject, ReviewPackage, RowInput } from '../../src/types/lowcode'
 import type { DesignExchangeDocument } from '../../src/types/designExchange'
 import type { PluginInstallResult, InstalledPlugin } from '../../src/types/plugin'
+
+const collaboration: CollaborationApi = {
+  createSession: (input: CollaborationCreateInput) => ipcRenderer.invoke('lowcode:collaboration-create', input),
+  joinSession: (input: CollaborationJoinInput) => ipcRenderer.invoke('lowcode:collaboration-join', input),
+  getSession: () => ipcRenderer.invoke('lowcode:collaboration-get'),
+  publishProject: (project: LowCodeProject) => ipcRenderer.invoke('lowcode:collaboration-publish', project),
+  leaveSession: () => ipcRenderer.invoke('lowcode:collaboration-leave'),
+  openWindow: () => ipcRenderer.invoke('lowcode:collaboration-open-window'),
+  onEvent: (listener: (event: CollaborationEvent) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: CollaborationEvent) => listener(payload)
+    ipcRenderer.on('lowcode:collaboration-event', handler)
+    return () => ipcRenderer.removeListener('lowcode:collaboration-event', handler)
+  },
+}
 
 // Only expose the small, typed surface that the renderer needs.
 contextBridge.exposeInMainWorld('lowcode', {
@@ -28,4 +43,5 @@ contextBridge.exposeInMainWorld('lowcode', {
   removePlugin: (id: string) => ipcRenderer.invoke('lowcode:remove-plugin', id),
   setPluginEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('lowcode:set-plugin-enabled', id, enabled),
   getPluginUiUrl: (id: string): Promise<string | null> => ipcRenderer.invoke('lowcode:get-plugin-ui-url', id),
+  collaboration,
 })

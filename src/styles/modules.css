@@ -1,0 +1,9 @@
+.module-shell { isolation: isolate; }
+.home-shell { background: #f8f8fc; }
+.workspace-shell { background: #edf0f5; }
+.home-shell .topbar { background: rgba(255, 255, 255, .94); }
+.workspace-shell .topbar { background: rgba(255, 255, 255, .98); }
+.module-shell .main-column > .workspace-view,
+.module-shell .main-column > .module-view,
+.module-shell .main-column > .builder-view,
+.module-shell .main-column > .flow-view { min-height: 0; flex: 1; }

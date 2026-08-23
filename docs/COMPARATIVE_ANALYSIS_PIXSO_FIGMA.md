@@ -1,4 +1,7 @@
-﻿# Codeless 与 Pixso / Figma 的本地化竞品比较与演进建议
+> **中央研究与实施入口：** [docs/page-designer/README.md](./page-designer/README.md)
+> 本文件保留为历史综合分析；最新状态、工作包和 finished 验证记录以中央目录为准。
+
+# Codeless 与 Pixso / Figma 的本地化竞品比较与演进建议
 
 > **评估对象**：当前工作区中的 Codeless（Electron + Vue 3 + TypeScript + SQLite）
 >

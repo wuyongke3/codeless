@@ -22,6 +22,7 @@ const isContainer = computed(() => isContainerType(props.widget.type))
 const selected = computed(() => props.state.selectedWidgetIds.includes(props.widget.id))
 const interactionLocked = computed(() => props.state.isWidgetLocked?.(props.widget.id) ?? Boolean(props.widget.config?.layout?.locked))
 const inlineEditing = computed(() => props.state.isInlineEditing(props.widget.id))
+const renderInWebGL = computed(() => Boolean(props.state.isWebGLWidget?.(props.widget)))
 
 function layerDragId(event: DragEvent) {
   return event.dataTransfer?.getData('application/codeless-layer') || ''
@@ -91,7 +92,7 @@ function handleChildrenDrop(event: DragEvent) {
     :data-widget-id="widget.id"
     :data-testid="`canvas-widget-${widget.id}`"
     :data-widget-type="widget.type"
-    :class="['canvas-widget', `widget-${widget.type}`, { selected, dragging: state.draggingWidgetIds?.includes(widget.id) || state.draggingWidgetId === widget.id, 'drop-target': state.dropTargetContainerId === widget.id, locked: interactionLocked, hidden: widget.config?.layout?.hidden }]"
+    :class="['canvas-widget', `widget-${widget.type}`, { selected, dragging: state.draggingWidgetIds?.includes(widget.id) || state.draggingWidgetId === widget.id, 'drop-target': state.dropTargetContainerId === widget.id, locked: interactionLocked, hidden: widget.config?.layout?.hidden, 'webgl-placeholder': renderInWebGL }]"
     :aria-selected="selected"
     :style="state.widgetStyle(widget)"
     @pointerdown.stop="state.startWidgetMove($event, widget)"
@@ -110,7 +111,8 @@ function handleChildrenDrop(event: DragEvent) {
       <textarea v-if="state.inlineEditingField === 'description' || (state.inlineEditingField === 'text' && widget.type === 'text')" v-model="state.inlineEditingValue" :data-inline-editor="widget.id" :aria-label="`编辑${widget.name}`" @keydown.stop.ctrl.enter.prevent="state.commitInlineEdit" @keydown.stop.meta.enter.prevent="state.commitInlineEdit" @keydown.stop.esc.prevent="state.cancelInlineEdit" @blur="state.commitInlineEdit"></textarea>
       <input v-else v-model="state.inlineEditingValue" :data-inline-editor="widget.id" :aria-label="`编辑${widget.name}`" @keydown.stop.enter.exact.prevent="state.commitInlineEdit" @keydown.stop.esc.prevent="state.cancelInlineEdit" @blur="state.commitInlineEdit" />
     </div>
-    <WidgetRenderer :widget="widget" :design-system="state.currentProject?.designSystem" :runtime="false">
+    <div v-if="renderInWebGL" class="canvas-webgl-placeholder" aria-hidden="true"></div>
+    <WidgetRenderer v-else :widget="widget" :design-system="state.currentProject?.designSystem" :runtime="false">
       <template v-if="isContainer" #children>
         <div class="canvas-children-layer" :data-container-id="widget.id" @dragover.prevent="handleChildrenDragOver" @drop.prevent="handleChildrenDrop">
           <CanvasWidgetNode v-for="child in children" :key="child.id" :widget="child" :widgets="widgets" :state="state" />

@@ -1,5 +1,5 @@
 /* 画布交互：连续拖拽、指针捕获与双击内联编辑 */
-.canvas-widget{touch-action:none;will-change:left,top,width,height;pointer-events:auto;}
+.canvas-widget{touch-action:none;pointer-events:auto;}
 .canvas-widget.dragging{pointer-events:none;z-index:999;cursor:grabbing;transition:none!important;}.canvas-widget.dragging > .widget-label,.canvas-widget.dragging > .handle{pointer-events:none;}
 body.codeless-pointer-active{user-select:none;}
 .canvas-widget:not(.selected):not(.locked):hover{outline:1px solid #8f87ef;outline-offset:2px;box-shadow:0 0 0 3px #665cf60d;}
@@ -14,3 +14,5 @@ body.codeless-pointer-active{user-select:none;}
 .widget-button .canvas-inline-editor input{text-align:center;font-weight:600;}
 .widget-heading .canvas-inline-editor input,.widget-stat .canvas-inline-editor input{font-weight:600;}
 .widget-image .canvas-inline-editor input{text-align:center;}
+
+.canvas-widget.dragging { will-change: left, top, width, height; }

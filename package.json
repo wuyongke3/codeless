@@ -2,7 +2,7 @@
     "name":  "codeless",
     "version":  "0.1.0",
     "main":  "dist-electron/main/index.js",
-    "description":  "Codeless — local-first rapid prototyping tool powered by Electron, Vue and SQLite.",
+    "description":  "Codeless 鈥?local-first rapid prototyping tool powered by Electron, Vue and SQLite.",
     "author":  "Codeless",
     "license":  "MIT",
     "private":  true,
@@ -35,7 +35,12 @@
                     "build:linux:arm64":  "node scripts/build.mjs --linux --arm64",
                     "build:linux:all":  "node scripts/build.mjs --linux --x64 --arm64",
                     "preview":  "vite preview",
-                    "test:e2e":  "npm run build:vite \u0026\u0026 electron --no-sandbox scripts/e2e-electron.mjs"
+                    "test:e2e":  "npm run build:vite \u0026\u0026 electron --no-sandbox scripts/e2e-electron.mjs",
+                    "validate:page-designer":  "node scripts/validate-page-designer.mjs",
+                    "test:page-designer-history":  "node --experimental-strip-types scripts/page-designer-history-fixture.mjs",
+                      "test:page-designer-guides":  "node --experimental-strip-types scripts/page-designer-guides-fixture.mjs",
+                    "bench:page-designer":  "node --experimental-strip-types scripts/benchmarks/page-designer-performance.mjs",
+                    "clean:test-artifacts":  "node scripts/clean-test-artifacts.mjs"
                 },
     "devDependencies":  {
                             "@vitejs/plugin-vue":  "^6.0.7",

@@ -13,6 +13,8 @@ export interface WidgetPatch {
 }
 
 export interface LayoutPatch {
+  /** Monotonic sequence shared with project-level history for deterministic undo/redo ordering. */
+  sequence?: number
   beforeMeta: LayoutMetaSnapshot
   afterMeta: LayoutMetaSnapshot
   widgetChanges: WidgetPatch[]

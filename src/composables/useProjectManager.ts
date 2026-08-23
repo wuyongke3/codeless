@@ -17,12 +17,14 @@ interface ProjectManagerOptions {
   notify: (message: string, tone?: 'success' | 'info' | 'danger') => void
   loadTables: () => Promise<void>
   resetDesigner: () => void
+  publishCollaborationProject: (project: LowCodeProject) => Promise<void>
+  navigateToArea?: (area: Area, projectId?: string) => boolean | Promise<boolean>
 }
 
 export function useProjectManager(options: ProjectManagerOptions) {
   const {
     loading, projects, activities, databasePath, activeArea, currentProjectId, currentProject,
-    dirty, selectedWidgetId, notify, loadTables, resetDesigner,
+    dirty, selectedWidgetId, notify, loadTables, resetDesigner, publishCollaborationProject, navigateToArea,
   } = options
   const saving = ref(false)
   const showCreateModal = ref(false)
@@ -36,7 +38,8 @@ export function useProjectManager(options: ProjectManagerOptions) {
       projects.value = result.projects.map(normalizeProject)
       activities.value = result.activities
       databasePath.value = result.databasePath
-      currentProjectId.value = result.projects[0]?.id || ''
+      const requestedProjectId = currentProjectId.value
+      currentProjectId.value = result.projects.some(project => project.id === requestedProjectId) ? requestedProjectId : result.projects[0]?.id || ''
       await loadTables()
     } catch (error) {
       console.error(error)
@@ -44,17 +47,22 @@ export function useProjectManager(options: ProjectManagerOptions) {
       projects.value = result.projects.map(normalizeProject)
       activities.value = result.activities
       databasePath.value = result.databasePath
-      currentProjectId.value = result.projects[0]?.id || ''
+      const requestedProjectId = currentProjectId.value
+      currentProjectId.value = result.projects.some(project => project.id === requestedProjectId) ? requestedProjectId : result.projects[0]?.id || ''
       notify('数据库连接失败，已进入演示模式', 'danger')
     } finally {
       loading.value = false
     }
   }
 
-  function openBuilder(projectId: string) {
+  async function openBuilder(projectId: string) {
+    if (!projectId) return false
+    const navigated = await navigateToArea?.('builder', projectId)
+    if (navigated === false) return false
     currentProjectId.value = projectId
     activeArea.value = 'builder'
     resetDesigner()
+    return true
   }
 
   async function saveProject(message = '页面已保存到本地 SQLite') {
@@ -68,6 +76,7 @@ export function useProjectManager(options: ProjectManagerOptions) {
       else localStorage.setItem('codeless-projects', JSON.stringify(projects.value))
       const index = projects.value.findIndex(project => project.id === saved.id)
       if (index >= 0) projects.value[index] = saved
+      await publishCollaborationProject(saved)
       dirty.value = false
       notify(message)
     } catch (error) {
@@ -111,6 +120,12 @@ export function useProjectManager(options: ProjectManagerOptions) {
       const saved = window.lowcode
         ? await window.lowcode.saveProject(clone(imported))
         : browserSaveProject(imported)
+      const navigated = await navigateToArea?.('builder', saved.id)
+      if (navigated === false) {
+        projects.value = [saved, ...projects.value.filter(project => project.id !== saved.id)]
+        notify('\u9879\u76ee\u5df2\u5bfc\u5165\uff0c\u5f53\u524d\u7f16\u8f91\u4ecd\u4fdd\u7559', 'info')
+        return
+      }
       projects.value = [saved, ...projects.value.filter(project => project.id !== saved.id)]
       currentProjectId.value = saved.id
       selectedWidgetId.value = ''
@@ -174,6 +189,8 @@ export function useProjectManager(options: ProjectManagerOptions) {
       createdAt,
       updatedAt: createdAt,
     }
+    const navigated = await navigateToArea?.('builder', project.id)
+    if (navigated === false) return
     projects.value.unshift(project)
     currentProjectId.value = project.id
     showCreateModal.value = false
@@ -183,12 +200,14 @@ export function useProjectManager(options: ProjectManagerOptions) {
     dirty.value = true
     resetDesigner()
     dirty.value = true
-    await saveProject('新应用已创建并保存')
+    await saveProject('\u65b0\u5e94\u7528\u5df2\u521b\u5efa\u5e76\u4fdd\u5b58')
   }
 
   async function confirmDeleteProject() {
     if (!currentProject.value) return
     try {
+      const navigated = await navigateToArea?.('workspace')
+      if (navigated === false) return
       const id = currentProject.value.id
       if (window.lowcode) await window.lowcode.deleteProject(id)
       projects.value = projects.value.filter(project => project.id !== id)
@@ -197,8 +216,9 @@ export function useProjectManager(options: ProjectManagerOptions) {
       selectedWidgetId.value = ''
       showDeleteConfirm.value = false
       activeArea.value = 'workspace'
+      dirty.value = false
       resetDesigner()
-      notify('应用已删除', 'info')
+      notify('\u5e94\u7528\u5df2\u5220\u9664', 'info')
     } catch (error) {
       console.error(error)
       notify('删除失败', 'danger')

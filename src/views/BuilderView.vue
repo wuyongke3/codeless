@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import type { DesignSystem, DesignTheme } from '../types/lowcode'
 import AppIcon from '../components/AppIcon.vue'
 import ReviewPanel from '../components/ReviewPanel.vue'
 import InspectPanel from '../components/InspectPanel.vue'
 import WidgetRenderer from '../components/WidgetRenderer.vue'
 import CanvasWidgetNode from '../components/CanvasWidgetNode.vue'
+import CanvasWebGLLayer from '../components/CanvasWebGLLayer.vue'
 import CanvasContextMenu from '../components/CanvasContextMenu.vue'
+import CommandPalette from '../components/CommandPalette.vue'
+import TokenManagerPanel from '../components/TokenManagerPanel.vue'
 import VirtualLayerTree from '../components/VirtualLayerTree.vue'
 import { eventOptionsForWidget, widgetEventActionLabels } from '../composables/utils'
 import { widgetDefinitionMap, type WidgetFieldSchema } from '../components/registry/widgetRegistry'
@@ -18,6 +21,9 @@ const props = defineProps<{ ui: AppState }>()
 const state = reactive(props.ui)
 const canvasRef = props.ui.canvasRef
 const canvasViewportRef = props.ui.canvasViewportRef
+const commandPaletteOpen = ref(false)
+const tokenManagerOpen = ref(false)
+const spacePressed = ref(false)
 const eventActionOptions = Object.entries(widgetEventActionLabels).map(([value, label]) => ({ value, label }))
 const tokenOptionMap = {
   color: [
@@ -141,14 +147,48 @@ function dropLayer(event: DragEvent, targetId: string) {
   const widgetId = event.dataTransfer?.getData('application/codeless-layer')
   if (widgetId && widgetId !== targetId) state.reorderWidgetsByLayer(widgetId, targetId)
 }
+
+function startCanvasPointer(event: PointerEvent) {
+  const shouldPan = event.button === 1 || (event.button === 0 && spacePressed.value)
+  if (!shouldPan) {
+    state.startCanvasSelection(event)
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  state.handleCanvasPanPointerDown(event, true)
+}
+
+function handleDesignerKeydown(event: KeyboardEvent) {
+  state.handleCanvasViewportKeydown(event)
+  if (event.code === 'Space' && !event.repeat && !['INPUT', 'TEXTAREA', 'SELECT'].includes((event.target as HTMLElement)?.tagName)) {
+    event.preventDefault()
+    spacePressed.value = true
+  }
+}
+
+function handleDesignerKeyup(event: KeyboardEvent) {
+  state.handleCanvasViewportKeyup(event)
+  if (event.code === 'Space') spacePressed.value = false
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleDesignerKeydown)
+  window.addEventListener('keyup', handleDesignerKeyup)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleDesignerKeydown)
+  window.removeEventListener('keyup', handleDesignerKeyup)
+})
+
 </script>
 
 <template>
 <div v-if="state.currentProject" class="builder-view">
   <div class="builder-toolbar">
     <div class="builder-breadcrumb"><span>{{ state.currentProject.layout.pageName }}</span><AppIcon name="chevron-right" :size="14" /><strong>画布</strong><em v-if="state.selectedWidgetIds.length > 1">已选中 {{ state.selectedWidgetIds.length }} 个</em></div>
-    <div class="builder-center-tools"><button :disabled="!state.historyStack.length" title="撤销 Ctrl/Cmd+Z" @click="state.undo"><AppIcon name="undo" :size="17" /></button><button :disabled="!state.futureStack.length" title="重做 Ctrl/Cmd+Shift+Z" @click="state.redo"><AppIcon name="redo" :size="17" /></button><i></i><select v-model.number="state.zoom" title="Ctrl/Cmd + 滚轮缩放"><option :value="0.25">25%</option><option :value="0.5">50%</option><option :value="0.75">75%</option><option :value="1">100%</option><option :value="1.5">150%</option><option :value="2">200%</option></select></div>
-    <div class="builder-actions"><span :class="['save-state', { dirty: state.dirty }]"><i></i>{{ state.saving ? '正在保存...' : state.dirty ? '有未保存更改' : '已保存到本地' }}</span><button class="ghost-button compact" @click="state.resetRuntimeValues(); state.showPreview = true"><AppIcon name="eye" :size="16" />预览</button><button class="ghost-button compact" @click="state.toggleReviewPanel()">Review</button><button class="ghost-button compact" :disabled="!state.selectedWidget" @click="state.toggleInspectPanel()">Inspect</button><button class="ghost-button compact" @click="state.importProject"><AppIcon name="upload" :size="16" />????</button><button class="ghost-button compact" @click="state.exportProject"><AppIcon name="download" :size="16" />????</button><button class="ghost-button compact" data-design-exchange="import" title="?? Figma Plugin ? Codeless ?? JSON" @click="state.importDesignExchange"><AppIcon name="upload" :size="16" />?? JSON ??</button><button class="ghost-button compact" data-design-exchange="export" title="???????????????? JSON" @click="state.exportDesignExchange"><AppIcon name="download" :size="16" />?? JSON ??</button><button class="ghost-button compact" @click="state.saveProject()"><AppIcon name="save" :size="16" />保存</button><button class="primary-button compact" @click="state.publishProject"><AppIcon name="play" :size="15" />发布</button></div>
+    <div class="builder-center-tools"><button class="command-trigger" title="打开命令面板 Ctrl/Cmd+K" @click="commandPaletteOpen = true">⌘K</button><button :disabled="!state.historyStack.length" title="撤销 Ctrl/Cmd+Z" @click="state.undo"><AppIcon name="undo" :size="17" /></button><button :disabled="!state.futureStack.length" title="重做 Ctrl/Cmd+Shift+Z" @click="state.redo"><AppIcon name="redo" :size="17" /></button><i></i><select v-model.number="state.zoom" title="Ctrl/Cmd + 滚轮缩放"><option :value="0.25">25%</option><option :value="0.5">50%</option><option :value="0.75">75%</option><option :value="1">100%</option><option :value="1.5">150%</option><option :value="2">200%</option></select></div>
+    <div class="builder-actions"><span :class="['save-state', { dirty: state.dirty }]"><i></i>{{ state.saving ? '正在保存...' : state.dirty ? '有未保存更改' : '已保存到本地' }}</span><button class="ghost-button compact collaboration-toolbar-button" data-collaboration-toggle @click="state.toggleCollaborationPanel"><AppIcon name="users" :size="15" />协作<span v-if="state.session" class="collaboration-toolbar-dot"></span></button><button class="ghost-button compact" @click="state.resetRuntimeValues(); state.showPreview = true"><AppIcon name="eye" :size="16" />预览</button><button class="ghost-button compact" @click="state.toggleReviewPanel()">Review</button><button class="ghost-button compact" :disabled="!state.selectedWidget" @click="state.toggleInspectPanel()">Inspect</button><button class="ghost-button compact" @click="state.importProject"><AppIcon name="upload" :size="16" />导入</button><button class="ghost-button compact" @click="state.exportProject"><AppIcon name="download" :size="16" />导出</button><button class="ghost-button compact" data-design-exchange="import" title="从 Figma Plugin 导入 Codeless JSON" @click="state.importDesignExchange"><AppIcon name="upload" :size="16" />导入 JSON</button><button class="ghost-button compact" data-design-exchange="export" title="将当前设计导出为 codeless-design JSON" @click="state.exportDesignExchange"><AppIcon name="download" :size="16" />导出 JSON</button><button class="ghost-button compact" @click="state.saveProject()"><AppIcon name="save" :size="16" />保存</button><button class="primary-button compact" @click="state.publishProject"><AppIcon name="play" :size="15" />发布</button></div>
   </div>
   <section class="builder-layout" :style="{ '--component-panel-width': state.componentPanelWidth + 'px', '--inspector-panel-width': state.inspectorPanelWidth + 'px' }">
     <aside class="component-panel" :style="{ '--panel-width': `${state.componentPanelWidth}px` }">
@@ -177,15 +217,46 @@ function dropLayer(event: DragEvent, targetId: string) {
 
     <div class="canvas-workspace" @wheel="state.handleCanvasWheel" @click="state.clearSelection()" @contextmenu.stop.prevent="state.handleCanvasContextMenu">
       <div class="canvas-rulers"><span>0</span><span>240</span><span>480</span><span>720</span><span>960</span></div>
-      <div ref="canvasViewportRef" class="canvas-stage" @scroll="state.updateCanvasViewport"><div class="canvas-frame" :style="{ width: `${state.currentProject.layout.canvas.width * state.zoom}px`, height: `${state.currentProject.layout.canvas.height * state.zoom}px` }">
-        <div ref="canvasRef" class="design-canvas" :style="{ transform: `scale(${state.zoom})`, background: state.currentProject.layout.canvas.background }" @dragover.prevent="state.setDropTargetContainer('')" @drop.stop.prevent="state.onCanvasDrop" @pointerdown.stop="state.startCanvasSelection" @click.stop="state.handleCanvasClick" @contextmenu.stop.prevent="state.handleCanvasContextMenu">
-          <div class="canvas-grid-pattern"></div>
+      <div ref="canvasViewportRef" class="canvas-stage" :class="{ 'is-panning': state.canvasViewport.isPanning }" @scroll="state.updateCanvasViewport"><div class="canvas-frame" :style="state.canvasViewport.contentStyle">
+        <div ref="canvasRef" :class="['design-canvas', { 'large-project-canvas': state.largeProjectMode }]" :style="{ width: `${state.currentProject.layout.canvas.width}px`, height: `${state.currentProject.layout.canvas.height}px`, background: state.currentProject.layout.canvas.background }" @dragover.prevent="state.setDropTargetContainer('')" @drop.stop.prevent="state.onCanvasDrop" @pointerdown.capture="startCanvasPointer" @pointermove="state.handleCanvasPanPointerMove" @pointerup="state.handleCanvasPanPointerUp" @pointercancel="state.handleCanvasPanPointerCancel" @click.stop="state.handleCanvasClick" @contextmenu.stop.prevent="state.handleCanvasContextMenu">
+          <div class="canvas-grid-pattern" :style="state.canvasGridStyle"></div>
+          <div v-if="state.showCanvasGuides" class="canvas-guides-layer" aria-hidden="true">
+            <div
+              v-for="guide in state.canvasGuideLines"
+              :key="`${guide.axis}-${guide.position}`"
+              :class="['canvas-guide-line', `is-${guide.axis === 'x' ? 'vertical' : 'horizontal'}`]"
+              :style="guide.axis === 'x' ? { left: `${guide.position}px` } : { top: `${guide.position}px` }"
+            ></div>
+          </div>
+          <CanvasWebGLLayer
+            :widgets="state.webglWidgets"
+            :visible-ids="state.canvasVisibleWidgetIds"
+            :render-ids="state.webglWidgetIds"
+            :enabled="state.largeProjectMode && state.webglAcceleration"
+            :zoom="state.zoom"
+            :canvas-width="state.currentProject.layout.canvas.width"
+            :canvas-height="state.currentProject.layout.canvas.height"
+            :get-frame="state.webglWidgetFrame"
+            @webgl-ready="state.setWebGLSupported"
+          />
           <CanvasWidgetNode v-for="widget in state.canvasRootWidgets" :key="widget.id" :widget="widget" :widgets="state.currentProject.layout.widgets" :state="state" />
           <div v-if="state.selectionBox" class="canvas-selection-box" :style="{ left: `${state.selectionBox.x}px`, top: `${state.selectionBox.y}px`, width: `${state.selectionBox.width}px`, height: `${state.selectionBox.height}px` }"></div>
+          <div v-if="state.selectedWidgetIds.length > 1" class="canvas-selection-toolbar" @pointerdown.stop @click.stop>
+            <span>已选 {{ state.selectedWidgetIds.length }} 个</span>
+            <button type="button" title="左对齐" @click="state.alignSelectedWidgets('left')">左</button>
+            <button type="button" title="水平居中" @click="state.alignSelectedWidgets('centerX')">中</button>
+            <button type="button" title="右对齐" @click="state.alignSelectedWidgets('right')">右</button>
+            <button type="button" title="顶对齐" @click="state.alignSelectedWidgets('top')">上</button>
+            <button type="button" title="垂直居中" @click="state.alignSelectedWidgets('centerY')">中</button>
+            <button type="button" title="底对齐" @click="state.alignSelectedWidgets('bottom')">下</button>
+            <i></i>
+            <button type="button" title="水平等间距" :disabled="state.selectedWidgetIds.length < 3" @click="state.distributeSelectedWidgets('x')">↔</button>
+            <button type="button" title="垂直等间距" :disabled="state.selectedWidgetIds.length < 3" @click="state.distributeSelectedWidgets('y')">↕</button>
+          </div>
           <div v-if="!state.currentProject.layout.widgets.length" class="empty-canvas"><span><AppIcon name="layers" :size="26" /></span><strong>从左侧拖入第一个组</strong><p>也可以单击组件，将它快速添加到画布</p></div>
         </div>
       </div></div>
-      <div class="canvas-footer"><span><AppIcon name="monitor" :size="14" />{{ state.currentProject.layout.canvas.width }} × {{ state.currentProject.layout.canvas.height }}</span><span>缩放 {{ Math.round(state.zoom * 100) }}%</span><span><i></i>8px 网格参考 · 拖拽 1px / Shift 约束方向</span></div>
+      <div class="canvas-footer"><span><AppIcon name="monitor" :size="14" />{{ state.currentProject.layout.canvas.width }} × {{ state.currentProject.layout.canvas.height }}</span><span>缩放 {{ Math.round(state.zoom * 100) }}%</span><button class="canvas-mode-toggle" type="button" :class="{ active: state.gridEnabled }" data-testid="canvas-grid-toggle" @click.stop="state.toggleCanvasGrid">{{ state.gridEnabled ? `${state.gridSize}px 网格` : '网格已隐藏' }}</button><button class="canvas-mode-toggle" type="button" :class="{ active: state.snapEnabled }" data-testid="canvas-snap-toggle" @click.stop="state.toggleCanvasSnap">{{ state.snapEnabled ? '智能吸附' : '吸附已关闭' }}</button><span v-if="state.largeProjectMode" class="canvas-performance-summary" data-testid="canvas-performance-summary"><i></i>{{ state.performanceSummary.total }} 个组件 · 可见 {{ state.performanceSummary.visible }} · WebGL {{ state.performanceSummary.accelerated }}</span><button v-if="state.largeProjectMode" class="canvas-performance-toggle" data-testid="canvas-performance-toggle" :class="{ active: state.webglAcceleration && state.webglSupported }" @click.stop="state.toggleWebGLAcceleration">{{ state.webglAcceleration && state.webglSupported ? 'WebGL 局部加速已开' : '开启 WebGL 局部加速' }}</button><span v-else><i></i>拖拽 1px / Shift 约束方向</span></div>
     </div>
 
     <aside class="inspector-panel" :style="{ '--panel-width': `${state.inspectorPanelWidth}px` }">
@@ -271,6 +342,7 @@ function dropLayer(event: DragEvent, targetId: string) {
             <label class="property-field"><span>当前主题</span><select :value="ensureDesignSystem().activeThemeId" @change="updateDesignTheme"><option v-for="theme in designThemes()" :key="theme.id" :value="theme.id">{{ theme.name }} ({{ theme.mode }})</option></select></label>
             <div class="property-row"><label class="property-field"><span>主色</span><div class="color-control"><input :value="designColorValue('primary')" type="color" @input="updateDesignColor('primary', $event)" /><input :value="designColorValue('primary')" @input="updateDesignColor('primary', $event)" /></div></label><label class="property-field"><span>画布色</span><div class="color-control"><input :value="designColorValue('canvas')" type="color" @input="updateDesignColor('canvas', $event)" /><input :value="designColorValue('canvas')" @input="updateDesignColor('canvas', $event)" /></div></label></div>
             <div class="property-row"><label class="property-field"><span>表面色</span><div class="color-control"><input :value="designColorValue('surface')" type="color" @input="updateDesignColor('surface', $event)" /><input :value="designColorValue('surface')" type="text" @input="updateDesignColor('surface', $event)" /></div></label><label class="property-field"><span>文字色</span><div class="color-control"><input :value="designColorValue('text')" type="color" @input="updateDesignColor('text', $event)" /><input :value="designColorValue('text')" type="text" @input="updateDesignColor('text', $event)" /></div></label></div>
+            <button class="ghost-button compact token-manager-trigger" type="button" @click="tokenManagerOpen = true"><AppIcon name="sparkle" :size="14" />&#x7BA1;&#x7406;&#x5168;&#x90E8; Token</button>
             <small class="field-help">主题和 Token 保存在当前本地项目中，不依赖云同步。</small>
           </section>
           <section class="property-section page-route-section"><div class="property-title"><span>&#x8def;&#x7531;&#x4e0e;&#x5bfc;&#x822a;</span><AppIcon name="flow" :size="14" /></div><label class="property-field"><span>&#x8def;&#x5f84;</span><input :value="state.currentPage?.path || '/index'" placeholder="/detail" @change="state.updatePagePath(state.currentPage.id, ($event.target as HTMLInputElement).value)" /></label><div class="page-route-actions"><button :class="{ active: state.currentProject.entryPageId === state.currentPage?.id }" @click="state.setEntryPage(state.currentPage.id)"><AppIcon name="home" :size="13" /><span v-if="state.currentProject.entryPageId === state.currentPage?.id">当前入口</span><span v-else>设为入口</span></button><button @click="state.addPageGuard()"><AppIcon name="lock" :size="13" />&#x6dfb;&#x52a0;&#x5b88;&#x536b;</button></div><div v-if="state.currentPage?.guards?.length" class="page-guards"><article v-for="guard in state.currentPage.guards" :key="guard.id" class="page-guard-card"><header><select v-model="guard.type" @change="state.updatePageGuard(state.currentPage.id, guard.id, { type: guard.type })"><option value="auth">&#x767b;&#x5f55;&#x6821;&#x9a8c;</option><option value="condition">&#x6761;&#x4ef6;&#x8868;&#x8fbe;&#x5f0f;</option><option value="unsaved">&#x672a;&#x4fdd;&#x5b58;&#x786e;&#x8ba4;</option></select><label><input v-model="guard.enabled" type="checkbox" @change="state.updatePageGuard(state.currentPage.id, guard.id, { enabled: guard.enabled })" />&#x542f;&#x7528;</label><button class="icon-button tiny danger-text" @click="state.removePageGuard(state.currentPage.id, guard.id)"><AppIcon name="trash" :size="13" /></button></header><input v-if="guard.type === 'condition'" v-model="guard.expression" placeholder="&#x4f8b;&#x5982; isLoggedIn &#x6216; routeState.userId != null" @input="state.markDirty()" /><input v-model="guard.redirect" placeholder="&#x5931;&#x8d25;&#x65f6;&#x8df3;&#x8f6c;&#x5230;&#x7684;&#x8def;&#x5f84;&#xff08;&#x53ef;&#x9009;&#xff09;" @input="state.markDirty()" /><input v-model="guard.message" placeholder="&#x62e6;&#x622a;&#x63d0;&#x793a;&#xff08;&#x53ef;&#x9009;&#xff09;" @input="state.markDirty()" /></article></div><small class="field-help">&#x5b88;&#x536b;&#x6309;&#x8def;&#x7531;&#x548c;&#x9875;&#x9762;&#x987a;&#x5e8f;&#x6267;&#x884c;&#xff1b;&#x4e0d;&#x901a;&#x8fc7;&#x65f6;&#x53ef;&#x914d;&#x7f6e;&#x91cd;&#x5b9a;&#x5411;&#x3002;</small></section><div class="empty-inspector-tip"><AppIcon name="cursor" :size="18" /><p>在画布中选择组件，编辑 content、style、data 和 interaction。Shift 可多选，Delete 删除，Ctrl/Cmd+C/V 复制粘贴</p></div></div><div class="page-danger-zone"><button @click="state.showDeleteConfirm = true"><AppIcon name="trash" :size="15" />删除应用</button></div>
@@ -281,5 +353,7 @@ function dropLayer(event: DragEvent, targetId: string) {
   <ReviewPanel v-if="state.showReviewPanel" :ui="ui" />
   <InspectPanel v-if="state.showInspectPanel" :ui="ui" />
   <CanvasContextMenu :ui="ui" />
+  <CommandPalette :ui="ui" v-model:open="commandPaletteOpen" />
+  <TokenManagerPanel :ui="ui" v-model:open="tokenManagerOpen" />
 </div>
 </template>

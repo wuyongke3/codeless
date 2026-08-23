@@ -1,0 +1,27 @@
+﻿/*
+ * Standalone navigation primitives for the page designer canvas.
+ * Import this file from the host view when wiring the composable into UI.
+ */
+.designer-canvas-viewport {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.designer-canvas-viewport__content {
+  position: absolute;
+  inset: 0 auto auto 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.designer-canvas-viewport.is-panning,
+.designer-canvas-viewport.is-panning * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+.designer-canvas-viewport:not(.is-panning) {
+  cursor: default;
+}

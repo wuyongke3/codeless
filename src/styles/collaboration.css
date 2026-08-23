@@ -1,0 +1,24 @@
+
+.collaboration-panel { position: fixed; z-index: 20; top: 76px; right: 24px; width: 360px; max-height: calc(100vh - 100px); overflow: auto; padding: 16px; border: 1px solid #e4e5ed; border-radius: 14px; background: rgba(255,255,255,.98); box-shadow: 0 20px 50px rgba(28,32,56,.16); }
+.collaboration-panel-head, .collaboration-session-title, .collaboration-actions { display:flex; align-items:center; gap:8px; }
+.collaboration-panel-head { justify-content:space-between; margin-bottom: 14px; }
+.collaboration-panel-head strong, .collaboration-panel-head small { display:block; }
+.collaboration-panel-head strong { color:#303447; font-size:13px; }
+.collaboration-panel-head small { margin-top:3px; color:#9b9eae; font-size:9px; }
+.collaboration-session-card, .collaboration-start-card { padding: 12px; border:1px solid #ececf2; border-radius:11px; background:#fafbfe; }
+.collaboration-session-title strong { color:#303447; font-size:11px; }
+.collaboration-session-title em { margin-left:auto; color:#767b8d; font-size:9px; font-style:normal; }
+.collaboration-live-dot, .collaboration-toolbar-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:#20b486; box-shadow:0 0 0 3px #20b4861c; }
+.collaboration-session-hint { margin:8px 0 12px; color:#6e7386; font-size:9px; word-break:break-all; }
+.collaboration-panel .property-field { margin-bottom:9px; }
+.collaboration-panel .property-row { gap:8px; }
+.collaboration-actions { flex-wrap:wrap; margin-top: 10px; }
+.collaboration-actions .danger-button { margin-left:auto; }
+.collaboration-full-button { width:100%; }
+.collaboration-divider { display:flex; align-items:center; gap:8px; margin:14px 0; color:#aaaebe; font-size:9px; }
+.collaboration-divider::before, .collaboration-divider::after { content:''; height:1px; flex:1; background:#e6e7ed; }
+.collaboration-toolbar-button { position:relative; }
+.collaboration-toolbar-dot { margin-left:1px; }
+.panel-fade-enter-active, .panel-fade-leave-active { transition: opacity .15s ease, transform .15s ease; }
+.panel-fade-enter-from, .panel-fade-leave-to { opacity:0; transform:translateY(-6px); }
+@media (max-width: 900px) { .collaboration-panel { left: 16px; right:16px; top:70px; width:auto; } }

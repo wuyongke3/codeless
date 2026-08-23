@@ -1,4 +1,4 @@
-﻿import type { DesignSystem, DesignTheme, DesignTokenPrimitive } from '../types/lowcode'
+﻿import type { DesignSystem, DesignTheme, DesignTokenPrimitive, DesignTokenValue } from '../types/lowcode'
 
 export const DEFAULT_DESIGN_SYSTEM: DesignSystem = {
   activeThemeId: 'light',
@@ -77,6 +77,7 @@ function mergeRecord<T extends Record<string, unknown>>(fallback: T, value: unkn
 export function normalizeDesignSystem(value?: DesignSystem): DesignSystem {
   const fallback = cloneDefaultSystem()
   if (!value || !Array.isArray(value.themes)) return fallback
+
   value.themes = value.themes
     .filter(theme => isRecord(theme) && typeof theme.id === 'string')
     .map((theme) => {
@@ -84,19 +85,39 @@ export function normalizeDesignSystem(value?: DesignSystem): DesignSystem {
       const themeId = typeof rawTheme.id === 'string' ? rawTheme.id : 'light'
       const fallbackTheme = fallback.themes.find(item => item.id === themeId) || fallback.themes[0]
       const rawTokens = (isRecord(rawTheme.tokens) ? rawTheme.tokens : {}) as Record<string, unknown>
+      const fallbackTokens = fallbackTheme.tokens
+      const removedTokens = mergeRecord({}, rawTheme.removedTokens) as Record<string, boolean>
+      const mergeFallbackBucket = <T extends Record<string, unknown>>(
+        fallbackBucket: T,
+        rawBucket: unknown,
+        canonical: string,
+        bucket: string,
+      ): T => {
+        const result = mergeRecord(fallbackBucket, rawBucket)
+        for (const key of Object.keys(result)) {
+          if (removedTokens[`${canonical}.${key}`] === true || removedTokens[`${bucket}.${key}`] === true) delete result[key]
+        }
+        return result
+      }
       return {
         id: themeId,
         name: typeof rawTheme.name === 'string' && rawTheme.name.trim() ? rawTheme.name : fallbackTheme.name,
         mode: rawTheme.mode === 'dark' ? 'dark' : 'light',
         tokens: {
-          colors: mergeRecord(fallbackTheme.tokens.colors, rawTokens.colors),
-          typography: mergeRecord(fallbackTheme.tokens.typography, rawTokens.typography),
-          spacing: mergeRecord(fallbackTheme.tokens.spacing, rawTokens.spacing),
-          radii: mergeRecord(fallbackTheme.tokens.radii, rawTokens.radii),
-          shadows: mergeRecord(fallbackTheme.tokens.shadows, rawTokens.shadows),
+          colors: mergeFallbackBucket(fallbackTokens.colors, rawTokens.colors, 'color', 'colors'),
+          typography: mergeFallbackBucket(fallbackTokens.typography, rawTokens.typography, 'type', 'typography'),
+          spacing: mergeFallbackBucket(fallbackTokens.spacing, rawTokens.spacing, 'space', 'spacing'),
+          radii: mergeFallbackBucket(fallbackTokens.radii, rawTokens.radii, 'radius', 'radii'),
+          shadows: mergeFallbackBucket(fallbackTokens.shadows, rawTokens.shadows, 'shadow', 'shadows'),
+          texts: mergeRecord({}, rawTokens.texts),
+          booleans: mergeRecord({}, rawTokens.booleans),
+          custom: mergeRecord({}, rawTokens.custom),
         },
+        aliases: mergeRecord({}, rawTheme.aliases),
+        removedTokens,
       } satisfies DesignTheme
     })
+
   if (!value.themes.length) value.themes = fallback.themes
   if (!value.themes.some(theme => theme.id === value.activeThemeId)) value.activeThemeId = value.themes[0].id
   return value
@@ -107,15 +128,68 @@ export function getActiveDesignTheme(system?: DesignSystem): DesignTheme {
   return normalized.themes.find(theme => theme.id === normalized.activeThemeId) || normalized.themes[0]
 }
 
-export function resolveDesignToken(system: DesignSystem | undefined, reference: string): DesignTokenPrimitive | undefined {
-  const normalizedReference = String(reference || '').trim().replace(/^\$/, '')
-  if (!normalizedReference) return undefined
-  const [rawCategory, ...parts] = normalizedReference.split('.')
-  const category = ({ color: 'colors', type: 'typography', space: 'spacing', radius: 'radii', shadow: 'shadows' } as Record<string, string>)[rawCategory] || rawCategory
-  const key = parts.join('.')
-  if (!key) return undefined
-  const theme = getActiveDesignTheme(system)
-  const tokens = theme.tokens as unknown as Record<string, Record<string, DesignTokenPrimitive>>
-  return tokens[category]?.[key]
+type TokenCategory = {
+  bucket: 'colors' | 'typography' | 'spacing' | 'radii' | 'shadows' | 'texts' | 'booleans' | 'custom'
+  canonical: string
 }
+
+const tokenCategories: Record<string, TokenCategory> = {
+  color: { bucket: 'colors', canonical: 'color' },
+  colors: { bucket: 'colors', canonical: 'color' },
+  type: { bucket: 'typography', canonical: 'type' },
+  typography: { bucket: 'typography', canonical: 'type' },
+  space: { bucket: 'spacing', canonical: 'space' },
+  spacing: { bucket: 'spacing', canonical: 'space' },
+  radius: { bucket: 'radii', canonical: 'radius' },
+  radii: { bucket: 'radii', canonical: 'radius' },
+  shadow: { bucket: 'shadows', canonical: 'shadow' },
+  shadows: { bucket: 'shadows', canonical: 'shadow' },
+  text: { bucket: 'texts', canonical: 'text' },
+  texts: { bucket: 'texts', canonical: 'text' },
+  boolean: { bucket: 'booleans', canonical: 'boolean' },
+  booleans: { bucket: 'booleans', canonical: 'boolean' },
+  number: { bucket: 'custom', canonical: 'number' },
+  custom: { bucket: 'custom', canonical: 'custom' },
+}
+
+function parseTokenReference(reference: string): { category: TokenCategory; key: string; canonical: string } | undefined {
+  const normalized = String(reference || '').trim().replace(/^\$/, '')
+  if (!normalized) return undefined
+  const [rawCategory, ...parts] = normalized.split('.')
+  const category = tokenCategories[rawCategory.toLowerCase()]
+  const key = parts.join('.').trim()
+  if (!category || !key) return undefined
+  return { category, key, canonical: `${category.canonical}.${key}` }
+}
+
+function aliasFor(theme: DesignTheme, parsed: NonNullable<ReturnType<typeof parseTokenReference>>) {
+  const aliases = theme.aliases || {}
+  return aliases[parsed.canonical]
+    || aliases[`${parsed.category.bucket}.${parsed.key}`]
+    || aliases[`${parsed.category.canonical}.${parsed.key}`]
+    || aliases[`$${parsed.canonical}`]
+}
+
+function resolveInTheme(theme: DesignTheme, reference: string, visited: Set<string>): DesignTokenValue | undefined {
+  const parsed = parseTokenReference(reference)
+  if (!parsed) return undefined
+  const identity = `${theme.id}:${parsed.canonical}`
+  if (visited.has(identity)) return undefined
+  visited.add(identity)
+
+  const alias = aliasFor(theme, parsed)
+  if (typeof alias === 'string' && alias.trim()) return resolveInTheme(theme, alias, visited)
+
+  const bucket = (theme.tokens as unknown as Record<string, Record<string, DesignTokenValue> | undefined>)[parsed.category.bucket]
+  if (!bucket || !Object.prototype.hasOwnProperty.call(bucket, parsed.key)) return undefined
+  return bucket[parsed.key]
+}
+
+/** Resolve legacy refs (color.primary, space.md, radius.lg) and token aliases. */
+export function resolveDesignToken(system: DesignSystem | undefined, reference: string): DesignTokenValue | undefined {
+  const theme = getActiveDesignTheme(system)
+  return resolveInTheme(theme, reference, new Set<string>())
+}
+
+export type { DesignTokenPrimitive }
 

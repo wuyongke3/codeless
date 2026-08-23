@@ -1,0 +1,73 @@
+{
+  "manifestVersion": 1,
+  "protocol": {
+    "projectFile": "src/types/projectFile.ts",
+    "widgetConfig": "docs/COMPONENT_DATA_PROTOCOL.md",
+    "recovery": "electron/main/index.ts"
+  },
+  "cases": [
+    {
+      "id": "v1-valid",
+      "file": "valid-v1.codeless.json",
+      "kind": "project-file",
+      "expect": "accept",
+      "result": { "format": "codeless", "schemaVersion": 1 }
+    },
+    {
+      "id": "legacy-direct-project",
+      "file": "legacy-direct-project.json",
+      "kind": "migration",
+      "expect": "accept",
+      "result": { "format": "codeless", "schemaVersion": 1 }
+    },
+    {
+      "id": "legacy-wrapper-project",
+      "file": "legacy-wrapper-project.json",
+      "kind": "migration",
+      "expect": "accept",
+      "result": { "format": "codeless", "schemaVersion": 1 }
+    },
+    {
+      "id": "invalid-json",
+      "file": "invalid-json.codeless",
+      "kind": "project-file",
+      "expect": "reject",
+      "errorCode": "invalid-json"
+    },
+    {
+      "id": "missing-project-id",
+      "file": "missing-project-id.codeless.json",
+      "kind": "project-file",
+      "expect": "reject",
+      "errorCode": "invalid-project-id"
+    },
+    {
+      "id": "invalid-widget-fields",
+      "file": "invalid-widget.codeless.json",
+      "kind": "project-file",
+      "expect": "reject",
+      "errorCode": "invalid-widget"
+    },
+    {
+      "id": "future-schema",
+      "file": "future-schema.codeless.json",
+      "kind": "project-file",
+      "expect": "reject",
+      "errorCode": "unsupported-schema-version"
+    },
+    {
+      "id": "valid-recovery-snapshot",
+      "file": "valid-recovery.codeless.recovery",
+      "kind": "recovery",
+      "expect": "accept",
+      "result": { "format": "codeless", "schemaVersion": 1 }
+    },
+    {
+      "id": "corrupt-recovery-snapshot",
+      "file": "corrupt-recovery.codeless.recovery",
+      "kind": "recovery",
+      "expect": "reject",
+      "errorCode": "invalid-json"
+    }
+  ]
+}

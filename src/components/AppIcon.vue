@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 withDefaults(defineProps<{
   name: string
   size?: number
@@ -25,6 +25,7 @@ withDefaults(defineProps<{
     <template v-if="name === 'home'">
       <path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" />
     </template>
+    <template v-else-if="name === 'users'"><circle cx="9" cy="9" r="3" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 4.5a3 3 0 0 1 0 5.8M18 14a4.5 4.5 0 0 1 3 4" /></template>
     <template v-else-if="name === 'apps'">
       <rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" />
     </template>

@@ -1,0 +1,187 @@
+﻿/* Route-level navigation keeps every shell action reachable without a permanent rail. */
+.route-navigation {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  padding: 12px 24px 10px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 4px 16px rgba(35, 38, 60, .035);
+}
+.route-navigation-main,
+.route-navigation-meta,
+.route-project-context,
+.route-tabs,
+.route-project-list,
+.route-navigation-status,
+.route-local-status,
+.route-home-link,
+.route-tab,
+.route-brand,
+.route-create-button,
+.route-project-button,
+.route-more-projects {
+  display: flex;
+  align-items: center;
+}
+.route-navigation-main { min-width: 0; gap: 10px; }
+.route-brand {
+  flex: 0 0 auto;
+  gap: 9px;
+  padding: 0;
+  color: var(--ink-secondary);
+  background: transparent;
+  text-align: left;
+}
+.route-brand:hover .route-brand-copy strong { color: var(--purple); }
+.route-brand-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #7b70ff, #5246e6);
+  box-shadow: 0 8px 20px #665cf638;
+}
+.route-brand-mark img { width: 100%; height: 100%; display: block; }
+.route-brand-copy { display: flex; flex-direction: column; gap: 1px; }
+.route-brand-copy strong { font-size: 15px; line-height: 17px; letter-spacing: -.3px; transition: color .18s; }
+.route-brand-copy small { color: #9498aa; font-size: 7px; letter-spacing: 1.15px; text-transform: uppercase; }
+.route-divider { width: 1px; height: 25px; flex: 0 0 auto; background: var(--line); }
+.route-divider-small { height: 20px; margin-inline: 1px; }
+.route-home-link {
+  flex: 0 0 auto;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border-radius: 8px;
+  color: #777c8e;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.route-home-link:hover,
+.route-home-link.active { color: #4f45e8; background: #f1efff; }
+.route-home-link:not(.active) .app-icon { transform: rotate(180deg); }
+.route-context-note { color: #a3a7b5; font-size: 9px; white-space: nowrap; }
+.route-project-context { min-width: 0; gap: 7px; white-space: nowrap; }
+.route-project-context strong { max-width: 150px; overflow: hidden; text-overflow: ellipsis; color: var(--ink-secondary); font-size: 11px; }
+.route-project-avatar { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; font-size: 10px; font-weight: 700; }
+.route-tabs { min-width: 0; gap: 2px; margin-left: 5px; overflow-x: auto; scrollbar-width: none; }
+.route-tabs::-webkit-scrollbar,
+.route-project-list::-webkit-scrollbar { display: none; }
+.route-tab {
+  position: relative;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 9px;
+  border-radius: 8px;
+  color: #818698;
+  background: transparent;
+  font-size: 10px;
+  white-space: nowrap;
+  transition: color .18s, background .18s;
+}
+.route-tab:hover { color: #4f45e8; background: #f6f5ff; }
+.route-tab.active { color: #5046e9; background: #eeecff; }
+.route-tab.active::after { content: ''; position: absolute; right: 10px; bottom: -11px; left: 10px; height: 2px; border-radius: 2px 2px 0 0; background: var(--purple); }
+.route-count { display: grid; place-items: center; min-width: 16px; height: 16px; padding-inline: 3px; border-radius: 6px; color: #6a61ee; background: #e1ddff; font-size: 8px; font-weight: 700; }
+.route-create-button {
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 34px;
+  margin-left: auto;
+  padding: 0 11px;
+  border-radius: 8px;
+  color: white;
+  background: linear-gradient(135deg, #7065fa, #584be9);
+  box-shadow: 0 6px 14px #665cf62e;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: transform .18s, box-shadow .18s;
+}
+.route-create-button:hover { transform: translateY(-1px); box-shadow: 0 9px 20px #665cf644; }
+.route-create-button kbd { padding: 2px 5px; border: 1px solid #ffffff24; border-radius: 4px; color: #dedbff; background: #ffffff16; font-size: 8px; }
+.route-navigation-meta { min-width: 0; gap: 16px; margin-top: 10px; }
+.route-projects { display: flex; align-items: center; min-width: 0; gap: 8px; overflow: hidden; }
+.route-meta-label { flex: 0 0 auto; color: #969aaa; font-size: 8px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase; }
+.route-project-list { min-width: 0; gap: 5px; overflow-x: auto; scrollbar-width: none; }
+.route-project-button {
+  flex: 0 0 auto;
+  gap: 6px;
+  max-width: 164px;
+  min-height: 28px;
+  padding: 0 8px 0 4px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #757a8c;
+  background: #f6f7fa;
+  font-size: 9px;
+  transition: border-color .18s, color .18s, background .18s;
+}
+.route-project-button:hover,
+.route-project-button.active { border-color: #d8d4ff; color: #5046e9; background: #f1efff; }
+.project-mini-icon { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 7px; font-size: 10px; font-weight: 700; }
+.project-color-0 { background: #665cf629; color: #a9a3ff; }
+.project-color-1 { background: #20b48624; color: #52d4ab; }
+.project-color-2 { background: #f59e0b26; color: #f6bd57; }
+.project-color-3 { background: #3698f524; color: #70b9ff; }
+.live-dot { width: 5px; height: 5px; border-radius: 50%; background: #34c892; box-shadow: 0 0 0 3px #34c89216; }
+.route-project-button .project-mini-icon { width: 22px; height: 22px; font-size: 9px; }
+.route-project-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-more-projects { flex: 0 0 auto; gap: 2px; padding: 0 3px; color: var(--purple); background: transparent; font-size: 9px; font-weight: 600; white-space: nowrap; }
+.route-more-projects:hover { color: var(--purple-dark); }
+.route-empty-projects { color: #a4a8b5; font-size: 9px; }
+.route-navigation-status { flex: 0 0 auto; gap: 13px; margin-left: auto; }
+.route-local-status { gap: 7px; padding: 5px 8px; border: 1px solid #e9e9f0; border-radius: 8px; background: #fbfbfd; }
+.route-local-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; color: #7168ef; background: #efedff; }
+.route-local-status span:nth-child(2) { display: flex; flex-direction: column; gap: 1px; }
+.route-local-status strong { color: #606579; font-size: 9px; line-height: 11px; }
+.route-local-status small { color: #a1a5b2; font-size: 7px; line-height: 9px; }
+.route-local-status > i { width: 6px; height: 6px; border-radius: 50%; background: #34c892; box-shadow: 0 0 0 3px #34c89214; }
+.route-tagline { display: inline-flex; align-items: center; gap: 5px; color: #9a9eae; font-size: 8px; white-space: nowrap; }
+.route-tagline .app-icon { color: #8178ff; }
+
+/* The application shell is now a single route surface; no left rail is reserved. */
+.app-shell { grid-template-columns: minmax(0, 1fr); }
+.main-column { width: 100%; }
+
+@media (max-width: 1180px) {
+  .route-navigation { padding-inline: 16px; }
+  .route-context-note,
+  .route-tagline { display: none; }
+}
+
+@media (max-width: 900px) {
+  .route-brand-copy { display: none; }
+  .route-navigation { padding-inline: 12px; }
+  .route-navigation-meta { align-items: flex-start; }
+  .route-navigation-status { gap: 0; }
+  .route-local-status { padding: 4px 6px; }
+  .route-local-status small { display: none; }
+  .route-local-status strong { font-size: 8px; }
+}
+
+@media (max-width: 720px) {
+  .route-navigation { padding: 9px 12px 8px; }
+  .route-navigation-main { gap: 6px; overflow: hidden; }
+  .route-divider { display: none; }
+  .route-home-link { padding-inline: 8px; }
+  .route-project-context { max-width: 130px; }
+  .route-project-context strong { max-width: 76px; }
+  .route-tabs { order: 5; flex: 1 1 100%; width: 100%; margin: 2px 0 0; }
+  .route-create-button { margin-left: auto; padding-inline: 9px; }
+  .route-create-button span { display: none; }
+  .route-create-button kbd { display: none; }
+  .route-navigation-main:has(.route-tabs) { flex-wrap: wrap; }
+  .route-navigation-meta { gap: 8px; margin-top: 8px; }
+  .route-projects { width: 100%; }
+  .route-meta-label { display: none; }
+  .route-navigation-status { display: none; }
+}
+
