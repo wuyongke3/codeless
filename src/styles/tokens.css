@@ -1,16 +1,23 @@
-:root {
-  /* 品牌色 */
+﻿:root {
+  /* Fluid desktop density: content is laid out in CSS pixels and gently scales with the available viewport. */
+  --ui-scale: 1;
+  --window-titlebar-height: clamp(42px, calc(38px + 1.1vw), 54px);
+  --font-xs: clamp(11px, calc(10px + .08vw), 13px);
+  --font-sm: clamp(13px, calc(12px + .12vw), 15px);
+  --font-md: clamp(15px, calc(14px + .16vw), 17px);
+  --control-height: clamp(34px, calc(32px + .35vw), 42px);
+  /* 鍝佺墝鑹?*/
   --purple: #665cf6;
   --purple-dark: #5549ea;
   --purple-light: #eeecff;
 
-  /* 语义色 */
+  /* 璇箟鑹?*/
   --green: #20b486;
   --orange: #f59e0b;
   --red: #e35568;
   --blue: #3698f5;
 
-  /* 中性色 */
+  /* 涓€ц壊 */
   --ink: #171a2b;
   --ink-secondary: #22263a;
   --muted: #74798c;
@@ -20,7 +27,7 @@
   --bg: #f5f6fa;
   --white: #ffffff;
 
-  /* 间距 */
+  /* 闂磋窛 */
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;
@@ -28,18 +35,30 @@
   --space-xl: 24px;
   --space-2xl: 32px;
 
-  /* 圆角 */
+  /* 鍦嗚 */
   --radius-sm: 6px;
   --radius-md: 9px;
   --radius-lg: 13px;
   --radius-xl: 18px;
 
-  /* 阴影 */
+  /* 闃村奖 */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, .04);
   --shadow-md: 0 6px 18px rgba(0, 0, 0, .06);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, .10);
 
-  /* 字体 */
+  /* 瀛椾綋 */
   --font-sans: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+@media (min-width: 1600px) {
+  :root { --ui-scale: 1.04; }
+}
+
+@media (min-width: 1920px) {
+  :root { --ui-scale: 1.08; }
+}
+
+@media (min-width: 2400px) {
+  :root { --ui-scale: 1.12; }
 }

@@ -1,4 +1,5 @@
 @import './app.css';
+@import './window-titlebar.css';
 @import './workspace.css';
 @import './builder.css';
 @import './widget.css';

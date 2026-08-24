@@ -59,13 +59,12 @@ state.navigate('/workspace/project_123/data')
 src/
 ├─ modules/
 │  ├─ home/
-│  │  ├─ HomeModule.vue       # 首页壳：首页路由导航 + 首页顶栏 + HomeView
+│  │  ├─ HomeModule.vue       # 首页壳：首页路由导航 + HomeView
 │  │  └─ HomeView.vue         # 应用卡片、概览、创建入口
 │  ├─ workspace/
-│  │  └─ WorkspaceModule.vue  # 工作区壳：工作区路由导航 + 工作区顶栏 + 区域视图
+│  │  └─ WorkspaceModule.vue  # 工作区壳：工作区路由导航 + 区域视图
 │  └─ shared/
      ├─ AppRouteNavigation.vue # 页面级路由、项目切换、创建入口和本地状态
-│     └─ AppTopbar.vue         # 根据 module 渲染不同标题和返回行为
 ├─ router/
 │  └─ appRouter.ts             # 一级模块路由、历史记录、深链接、离开守卫
 ├─ views/
@@ -80,7 +79,7 @@ src/
    └─ useAppRouter.ts          # 项目内页面路由（与一级模块路由分层）
 ```
 
-`App.vue` 只负责启动态、一级模块选择和全局弹窗，不再承载侧栏、顶栏以及所有页面的条件分支。后续新增工作区区域时，只需要：
+`App.vue` 只负责启动态、一级模块选择、Electron 自定义窗口标题栏和全局弹窗；Home/Workspace 通过独立的页面级路由导航组织内容，Builder 使用自己的 BuilderHeader，不再渲染旧的全局 AppTopbar。后续新增工作区区域时，只需要：
 
 1. 在 `Area`、`appRoutes` 中注册区域；
 2. 在 `WorkspaceModule.vue` 增加视图映射；
@@ -124,3 +123,5 @@ src/
 - 当需要测试时，优先对 `resolveTarget`、`navigate`、`handlePopState` 和脏状态守卫做纯路由测试，再做模块级 UI 测试。
 
 
+
+\n
