@@ -1,7 +1,14 @@
-# 当前页面设计器状态与差距分析
+# Page Designer Historical Baseline and Gap Analysis (2026-08-22 Snapshot)
 
-> **审计日期：** 2026-08-22  
-> **审计方式：** 源码静态审阅 + 已存在的 E2E/构建记录；不把未运行的测试写成已通过。  
+> **Snapshot date:** 2026-08-22
+> **Authority:** Historical snapshot only. It is not authoritative for current progress or release readiness; use `WORK_STATUS.md` and `ITERATION_PLAN.md`.
+> **Scope:** This preserves the source review and planning basis from that date. It does not represent `PD-CAN-01/02`, `PD-CMP-01`, `PD-STY-01`, `PD-WKF-01`, or completed `PD-COL-01` delivered after 2026-08-22. It also is not current validation evidence for the later Builder Header information-architecture refinement or the 2026-08-23 pre-release remediation of global Header removal, autosave latest-snapshot persistence, page creation/properties, and Space-to-pan behavior.
+> **Current status:** [`WORK_STATUS.md`](./WORK_STATUS.md). Work-package ordering and acceptance conditions are defined by [`ITERATION_PLAN.md`](./ITERATION_PLAN.md).
+> **Current synchronization date:** 2026-08-24
+> **Current documentation version:** v1.1.6-beta.1
+> **Current remediation note (2026-08-23):** This historical audit is superseded for the specific pre-release defects listed above. `WORK_STATUS.md` records the current implementation: no system `AppTopbar` in Home/Workspace; retained local `BuilderHeader`; independent page creation; live active-page property editing; Space + widget drag canvas panning; and a coalescing autosave queue that persists the latest component-content and layout state. The historical record cited 27 Electron cases; the current verification run completed 28 Electron E2E cases. This note does not erase the historical findings or claim full Figma/Pixso parity.
+> **Current integration note (2026-08-24):** The current code baseline additionally includes a custom Electron `AppWindowTitlebar`, narrow minimize/maximize-or-restore/close window-control IPC, removal of default application menu chrome, and responsive density/layout rules for viewport-dependent typography and structural controls. The current verification run passed typecheck, Vite/Electron build, static page-designer validation, fixtures/benchmark, 28-case Electron E2E, artifact cleanup, and diff checks. This remains a demonstrable pre-release baseline, not a packaging release or a claim of full Figma/Pixso parity.
+> **审计方式：** 源码静态审阅 + 已存在的 E2E/构建记录；不把未运行的测试写成已通过。
 > **证据原则：** 每个判断尽量绑定文件路径、类型或 composable；需要真实用户验证的部分标记为 `验证缺口`。
 
 ## 1. 当前基线
@@ -10,12 +17,12 @@
 
 | 项目 | 当前实现/证据 | 判断 |
 |---|---|---|
-| 桌面壳 | Electron 42，主进程、preload、renderer 分层；`electron/main/`、`electron/preload/` | 满足桌面架构约束。 |
+| Desktop shell | Electron 42; main process, preload, and renderer layers; `electron/main/`, `electron/preload/`; current code adds frameless-window configuration, custom `AppWindowTitlebar`, and narrow window-control IPC | Desktop architecture boundaries remain; titlebar and window-control regression coverage passed in the 2026-08-24 Electron E2E run. |
 | 前端 | Vue 3 + TypeScript + Vite；`src/views/BuilderView.vue` | 适合继续拆分编辑器领域状态。 |
 | 数据存储 | SQLite，数据库访问已隔离到 `electron/database/client.ts`、`worker.ts` | 已降低主进程阻塞风险，但大型增量模型仍需基准。 |
 | 文件格式 | `.codeless` v1、迁移/原子保存/恢复快照；`src/types/projectFile.ts`、`useProjectManager.ts` | 具备本地可移植基础。 |
 | 设计协议 | `WidgetConfig v1`；`src/types/lowcode.ts` | 现有 `layout/content/style/data/validation/interaction/meta` 分层是后续能力复用点。 |
-| 路由/工作区 | `src/router/`、`src/modules/`、`docs/architecture/app-shell-routing.md` | 首页、工作区、设计器入口已逐步分离。 |
+| Route/workspace | `src/router/`, `src/modules/`, `docs/architecture/app-shell-routing.md`; page shells no longer depend on the system default Header, and the window titlebar is independent of product route navigation | Home, workspace, and designer entry points remain separated; titlebar and route-navigation regression coverage passed in the 2026-08-24 Electron E2E run. |
 
 ### 1.2 已实现能力矩阵
 
@@ -24,7 +31,7 @@
 | 画布基础 | 固定尺寸画布、缩放、滚动视口、拖放、选择、框选、移动、缩放、锁定、隐藏、上下文菜单 | `BuilderView.vue`、`useDesigner.ts`、`CanvasWidgetNode.vue`、`CanvasContextMenu.vue` | 基础可用，非完整无限画布 |
 | 图层性能 | 视口裁剪、图层树虚拟化、拖拽 requestAnimationFrame 合帧、DOM containment | `VirtualLayerTree.vue`、`useDesigner.ts`、`src/styles/builder.css` | 已实现 |
 | 历史与持久化 | 自动保存、退出前保存、增量 patch history、`.codeless` 恢复 | `layoutHistory.ts`、`useProjectManager.ts`、`browserData.ts`、Electron IPC | 已实现 |
-| 布局 | Stack/Grid 自动布局、换行/间距等基础字段 | `autoLayout.ts`、`lowcode.ts`、`useDesigner.ts` | 基础可用，缺 Constraints/断点语义 |
+| Layout | Stack/Grid auto layout with basic wrapping and spacing fields; application shell now adds responsive font, control-height, titlebar-height, and density rules | `autoLayout.ts`, `lowcode.ts`, `useDesigner.ts`, `src/styles/tokens.css`, `src/styles/responsive.css`, `src/styles/window-titlebar.css` | Basic layout is usable; fluid shell scaling is wired and the current compact/wide responsive regression passed in the 2026-08-24 Electron suite. Complex canvas/panel breakpoint semantics and full Constraints/breakpoint behavior are still missing. |
 | 组件 | 组件面板、业务组件节点、基础变体字段 | `BuilderView.vue`、`lowcode.ts`、`useDesigner.ts` | 有基础，缺主件/实例/资源库治理 |
 | 设计系统 | Light/Dark 主题、颜色/字体/间距/圆角等 Token 引用 | `designSystem.ts`、`lowcode.ts`、`BuilderView.vue` | 有基础，缺管理台/引用追踪/批量治理 |
 | 审阅协作 | 本地快照、评论锚点、结构化 Diff、审阅包、同机多窗口、可选临时 LAN | `review.ts`、`useReview.ts`、`useCollaboration.ts`、`electron/collaboration/` | 已实现本地闭环，不等同云端实时协作 |
@@ -36,7 +43,7 @@
 
 ### 2.1 优先级评分方法
 
-```text
+```tex
 PriorityScore = UserValue(1-5) × WorkflowFrequency(1-5) × Differentiation(1-5)
                  ÷ EngineeringCost(1-5) × ElectronRisk(1-5)
 ```
@@ -65,7 +72,7 @@ PriorityScore = UserValue(1-5) × WorkflowFrequency(1-5) × Differentiation(1-5)
 
 当前 `WidgetConfig v1` 更接近“低代码业务节点配置”，而 Figma/Pixso 的核心则是“可嵌套、可复用、可布局、可审阅的设计对象”。下一阶段不应删除既有协议，而应增加可选字段和迁移：
 
-```text
+```tex
 Page
  └─ Container / Frame
      ├─ layout rules (auto-layout / constraints / breakpoints)
@@ -115,12 +122,14 @@ Page
 | 过早把整个画布改成 WebGL | 文本、输入法、可访问性、命中测试、插件和导出复杂度会同时上升。 |
 | 把“有 variant 字段”当作完整组件库 | 没有主件/实例/覆盖/更新/替换，仍不足以支撑设计系统。 |
 
-## 7. 退出条件
+## 7. Historical Exit Conditions (superseded by subsequent work-package status)
 
-本差距分析在以下条件满足前保持有效：
+The following conditions describe the audit exit criteria on 2026-08-22. They must not be used to determine the current pre-release status; use `WORK_STATUS.md` and `ITERATION_PLAN.md` instead.
 
 - `PD-HIS-01`、`PD-ARC-02`、`PD-DAT-01`、`PD-COL-04` 先完成并经过回归；`PD-CAN-01` 完成真实画布导航和基准 E2E；
 - `PD-CMP-01` 完成组件主件/实例协议迁移；
 - `PD-STY-01` 完成 Token 面板和引用追踪；
 - `PD-RES-01` 完成多视口布局规则并经过运行时验证；
 - `PD-QA-01/02` 建立性能和可访问性回归门禁。
+
+\n

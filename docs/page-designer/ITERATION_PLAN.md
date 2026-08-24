@@ -1,7 +1,7 @@
-﻿# 页面设计器迭代与优化计划
+# 页面设计器迭代与优化计划
 
-> **版本：** v1.1.4
-> **更新日期：** 2026-08-23  
+> **版本：** v1.1.6-beta.1
+> **更新日期：** 2026-08-24
 > **执行原则：** 按依赖顺序推进；没有写入冲突的工作包可以并行，不设固定工作日或开发周期。
 
 ## 1. 目标结果
@@ -25,7 +25,9 @@
 
 ## 1.3 Phase 0 执行快照
 
-截至 2026-08-23，Phase 0 已通过多线程协作完成 `PD-ARC-01`、`PD-HIS-01`、`PD-DAT-01`、`PD-QA-03`、`PD-QA-01`、`PD-ARC-02`、`PD-STY-01`、`PD-WKF-01`、`PD-CAN-01` 和 `PD-CAN-02` 十个工作包；其余工作包继续保持 `planned`。以下矩阵同步当前代码实现、交付物、验证结果、已知限制和后续动作。
+As of 2026-08-24, the pre-release baseline retains twelve completed packages: `PD-ARC-01`, `PD-HIS-01`, `PD-DAT-01`, `PD-QA-03`, `PD-QA-01`, `PD-ARC-02`, `PD-STY-01`, `PD-WKF-01`, `PD-CAN-01`, `PD-CAN-02`, `PD-CMP-01`, and `PD-COL-01`. Remaining packages stay `planned`; the current global next work package is P0 `PD-COL-04`, and the matrix below remains the implementation, validation, limitation, and follow-up record.
+
+The 2026-08-24 custom Electron titlebar/window-control integration and responsive density/layout work are non-roadmap integration work alongside the 2026-08-23 Builder Header and usability remediation: they remove default application chrome, add minimize/maximize-or-restore/close controls through narrow main/preload IPC, and scale typography and structural controls with the viewport. The same baseline retains global `AppTopbar` removal, independent blank-page creation, live page properties, Space-to-pan, and latest-snapshot autosave behavior. The 2026-08-24 verification run passed titlebar, IPC, responsive layout, and cross-feature regression checks. These changes do not change the 25 finished / 13 planned counts or P0 `PD-COL-04` as the next global package.
 
 | 工作包 | 状态 | 实现/交付物 | 验证 | 已知限制/后续 |
 |---|---|---|---|---|
@@ -39,6 +41,8 @@
 | `PD-WKF-01` | `finished` | 新增 `src/composables/commandRegistry.ts`、`CommandPalette.vue`、命令面板样式并接入 Builder；支持 Ctrl/Cmd+K、搜索、上下键、Enter、撤销/重做、选择/复制/粘贴/删除、层级、适配、缩放、保存/预览/Review/Inspect；新增 `zoomBy`、`fitCanvas` 和 Shift+1/Shift+2。 | `npm.cmd run typecheck`、`npm.cmd run build:vite`、`npm.cmd run test:e2e`、`git diff --check` 通过。 | 当前命令注册表为 Builder 本地实现，不支持插件动态注册或命令遥测；后续：`PD-WKF-02`。 |
 | `PD-CAN-01` | `finished` | 新增 `useDesignerCanvasViewport`、`src/types/designerCanvasViewport.ts` 和 `src/styles/designer-canvas-viewport.css`；通过 `useDesigner.ts` 配置页面尺寸、0.25–2 zoom、fit padding 与滚轮/平移策略，并在 `BuilderView.vue` 接入 `canvas-stage`、`canvas-frame`、逻辑尺寸 canvas、`contentStyle`、pointer/key handlers 和 `is-panning`。viewport API 覆盖缩放中心、pan/zoom 坐标转换、Fit Page/Selection、min/max zoom 和 Space/中键平移。 | `npm.cmd run typecheck`、`npm.cmd run build:vite`、`npm.cmd run test:e2e`、`npm.cmd run validate:page-designer`、`npm.cmd run test:page-designer-history`、`npm.cmd run bench:page-designer`、`npm.cmd run clean:test-artifacts`、`git diff --check` 通过；18 项 Electron E2E 全部通过，其中包含 `viewport navigation and transform integration`。 | 当前是有限页面/transform viewport，不等同完整无限画布；标尺仍是基础静态展示，网格/参考线/智能吸附属于 `PD-CAN-02`；selection bounds 由 Builder/选择模型提供；1000 节点浏览器导航专项留待 `PD-QA-02` 或后续 QA。 |
 | `PD-CAN-02` | `finished` | 新增 `src/types/designerCanvasGuides.ts`、`src/composables/designer/canvasGuides.ts`；在 `useDesigner.ts` 和 `BuilderView.vue` 接入默认 8px 网格、6px 阈值智能吸附、拖拽参考线、多选对齐和水平/垂直等间距；支持网格/吸附开关与 `Alt` 绕过吸附，批量操作进入统一历史记录。 | `npm.cmd run typecheck -- --pretty false`、`npm.cmd run build:vite`、`npm.cmd run test:e2e`、`npm.cmd run validate:page-designer`、`npm.cmd run test:page-designer-history`、`npm.cmd run test:page-designer-guides`、`npm.cmd run bench:page-designer`、`npm.cmd run clean:test-artifacts`、`node scripts/clean-test-artifacts.mjs --check`、`git diff --check` 通过；20 项 Electron E2E、3 组 9 个静态 fixture 和三档性能 benchmark 全部通过。 | 当前仍是有限页面 viewport；标尺尚未完整联动 pan/zoom；网格/吸附状态未持久化；参考线仅拖拽期间显示；浏览器 FPS/DOM/GPU 和真实大项目拖拽体验留待 `PD-QA-02`。 |
+| `PD-COL-01` | `finished` | Local review UX: open/resolved comments, object/coordinate anchors, screenshot limits of 3 MB per attachment and 8 attachments per comment, version context, page/node/property Diff filters, audit activity, and offline JSON review-package import/export. | `npm.cmd run typecheck -- --pretty false`, `npm.cmd run build:vite`, `npm.cmd run test:page-designer-review`, history/guides/components fixtures, static validation, benchmark, cleanup/diff check, and 27 Electron E2E cases passed. | Review packages merge review metadata only; embedded screenshot data URLs increase package size. Revision, node-level patches, and explicit conflict recovery remain P0 `PD-COL-04`. |
+
 ## 2. 并行工作流和团队分工
 
 | 子团队 | 工作流 | 可独立写入范围 | 主要依赖 | 目标输出 |
@@ -102,7 +106,7 @@ PD-CAN-01 + PD-ARC-01
 
 | ID | 状态 | 目标 | 交付物 | 依赖 | 验收标准 |
 |---|---|---|---|---|---|
-| `PD-CMP-01` | `planned` | 将基础 variant 升级为可维护的主组件/实例模型 | 组件定义表/协议；实例引用；覆盖记录（文本、Token、可见性、子节点属性）；变体属性；重置/分离/升级提示 | `PD-ARC-01` | 主组件修改能更新实例；合法覆盖保留；覆盖冲突有提示；断开后成为独立节点；旧 variant 可迁移 |
+| `PD-CMP-01` | `finished` | Upgrade basic variants into maintainable master components and instances | Project-local definition/link/override/conflict protocol; master publishing; preserve/reset refresh; detach; explicit legacy-variants migration; Inspector/context-menu/canvas entry points | `PD-ARC-01` | Master publication updates instances; content/style/Token/data/interaction/visibility overrides are preserved; same-field conflicts are explainable; detaching is independent; legacy variants migrate explicitly; component fixture covers the core behavior. |
 | `PD-CMP-02` | `planned` | 提升资源发现和插入效率 | 本地组件库面板；搜索/分类/收藏/最近使用；缩略图预览；拖放插入；库版本和缺失链接修复 | `PD-CMP-01` | 组件库规模 500 项仍可搜索；搜索结果可定位来源；替换库后实例关系可验证；无网络可用 |
 | `PD-CMP-03` | `planned` | 让组件交付与运行时数据绑定一致 | 组件状态/属性到 runtime props 的映射；组件文档片段；实例 Inspect 展示来源、变体和覆盖 | `PD-CMP-01`、现有 Inspect | Inspect 可解释组件来源；codegen 不丢失数据绑定；运行时预览与设计态状态一致 |
 
@@ -126,7 +130,7 @@ PD-CAN-01 + PD-ARC-01
 
 | ID | 状态 | 目标 | 交付物 | 依赖 | 验收标准 |
 |---|---|---|---|---|---|
-| `PD-COL-01` | `planned` | 把现有本地快照/评论/Diff 收敛成可交付审阅 UX | 评论状态（open/resolved）；对象/坐标锚点；截图附件；版本上下文；Diff 筛选；审阅包导出/导入 | 现有 review 模块 | 评论在节点移动后仍可解析；审阅包断网可导入；Diff 可按页面/节点/属性筛选；所有动作可追溯 |
+| `PD-COL-01` | `finished` | Consolidate local snapshots/comments/Diff into a deliverable review UX | Open/resolved comments; object/coordinate anchors; bounded screenshot attachments; version context; Diff filters; review-package import/export; audit activity | Existing review module | Comments remain resolvable after node movement; review packages import offline; Diff filters by page/node/property; every action is traceable; review fixture and Electron E2E pass |
 | `PD-COL-02` | `planned` | 让同机多窗口和临时局域网会话更安全可解释 | revision/会话 ID；只读审阅窗口；冲突提示；导入前 Diff；权限角色；默认关闭的 LAN 开关和审计 | `PD-COL-01`、现有 collaboration | 并发修改不静默覆盖；只读窗口不能写入；会话关闭清理临时数据；网络默认不监听 |
 | `PD-COL-03` | `planned` | 建立本地审阅模板和项目交付规则 | 审阅清单；版本命名；评论负责人/截止日期（本地元数据）；审阅包 manifest；归档策略 | `PD-COL-01` | 新成员按 README 可完成审阅；审阅包含版本、资源和验证信息；无云端依赖 |
 
@@ -164,8 +168,9 @@ PD-CAN-01 + PD-ARC-01
 |---|---|---|---|
 | 1 | `PD-ARC-01`（finished）、`PD-HIS-01`（finished）、`PD-DAT-01`（finished）、`PD-QA-03`（finished） | 契约完成后，质量门禁可独立运行 | 共享协议、历史、数据模型和 fixture 门禁均有验证记录；已完成 |
 | 2 | `PD-QA-01`（finished） | 已完成；可与不依赖其结果的审计工作只读并行 | 基准可复跑，超预算返回非零状态，测试产物完成清理；已完成 |
-| 3 | `PD-ARC-02`（finished）、`PD-CAN-01`（finished）、`PD-CAN-02`（finished）、`PD-CMP-01`（planned）、`PD-STY-01`（finished）、`PD-COL-01`（planned）、`PD-WKF-01`（finished） | 共享协议稳定后，各工作包使用 disjoint write scope 并行；画布 viewport、网格、参考线和吸附已完成；后续画布增强继续由更大范围 viewport/QA 工作承接 | 已完成包已有独立验证；`PD-CAN-01` 的页面 viewport 导航和 `PD-CAN-02` 的网格/吸附/多选布局回归完成；完整无限画布、标尺联动、状态持久化和浏览器性能专项继续由后续工作包覆盖 |
-| 4 | `PD-CMP-02/03`、`PD-STY-02/03`、`PD-RES-01`、`PD-COL-02`、`PD-WKF-02` | 仅在对应前置工作包完成后并行；`PD-CAN-02` 已完成并可作为后续响应式/批量编辑的画布基础 | 组件、Token、响应式、评审和批量编辑可串联；画布后续以 `PD-QA-02` 汇总大项目/A11y/浏览器性能回归 |
+| 3 | `PD-ARC-02`, `PD-CAN-01`, `PD-CAN-02`, `PD-CMP-01`, `PD-STY-01`, `PD-COL-01`, and `PD-WKF-01` (all finished) | These completed packages used isolated write scopes and independent verification. | Canvas navigation/guides/snap, master components/instances, Tokens, command system, and local review UX are in the pre-release baseline; large browser performance and A11y remain QA work. |
+| 3a | P0 `PD-COL-04` (planned; current global next work package) | Complete the revision envelope, node-level patches, and explicit conflict recovery before further shared-protocol parallel work. | Concurrent edits to different nodes must not silently overwrite; same-node conflicts must be explainable and retain a local-version path while the offline core remains usable. |
+| 4 | `PD-CMP-02/03`, `PD-STY-02/03`, `PD-RES-01`, `PD-COL-02`, `PD-WKF-02` | Run only after P0 `PD-COL-04` has completed or no longer blocks the shared collaboration protocol, and after each package prerequisite is complete. | Component, Token, responsive, review, and batch-edit workflows can compose; `PD-QA-02` later aggregates large-project, A11y, and browser-performance regression. |
 | 5 | `PD-RES-02/03`、`PD-COL-03`、`PD-WKF-03`、`PD-QA-02` | 依赖的领域能力完成后并行；QA 最终汇总 | 多视口、审阅包、资产检查和全量回归通过 |
 
 继续执行时只推进当前序列中最早的未完成工作包；任何工作包完成后，必须先补齐 `WORK_STATUS.md`，再进入其后置依赖。
@@ -202,7 +207,9 @@ PD-CAN-01 + PD-ARC-01
 
 | 日期 | 版本 | 变更内容 |
 |---|---|---|
-| 2026-08-23 | v1.1.2 | 更新 Phase 0 快照：`PD-ARC-01`、`PD-HIS-01`、`PD-DAT-01`、`PD-QA-03`、`PD-QA-01`、`PD-ARC-02`、`PD-STY-01`、`PD-WKF-01`、`PD-CAN-01` 标记为 `finished`；补充 viewport 真实接入、交付物、验证结果、已知限制和后续动作；同步工作项表与执行顺序，其余工作包继续保持 `planned`。 |
-| 2026-08-23 | v1.1.3 | 完成 `PD-CAN-01`：将 viewport composable 接入 Builder 主渲染路径，补齐缩放、Fit Page/Selection、Space/中键平移和独立 viewport E2E；同步 `WORK_STATUS.md` 为 `finished`，其余画布增强继续保持 `planned`。 |
+| 2026-08-24 | v1.1.6-beta.1 | Retained the `PD-COL-01` local review delivery record (auditable snapshots/comments, anchors, bounded screenshots, Diff filters, activity history, and offline JSON review-package import/export), and synchronized the plan with the current integration baseline: custom Electron titlebar/window controls, removal of default application chrome, responsive density/layout rules, and the previously implemented Header/page/autosave/panning remediation. Counts remain 25 finished / 13 planned / 0 in_progress / 0 blocked; P0 `PD-COL-04` remains the next global work package. Current-round verification completed on 2026-08-24: typecheck, Vite/Electron build, page-designer validation, all fixtures, benchmark, 28-case Electron E2E, test-artifact cleanup, and diff checks passed. |
+| 2026-08-23 | v1.1.5 | Completed `PD-CMP-01`: project-local master components/instances, override and conflict preservation, publishing, refresh/reset/detach, and explicit legacy-variants migration are wired into Builder. Component fixture plus 20 existing Electron E2E cases, typecheck, build, static validation, benchmark, and cleanup checks passed. The next dependent component package is `PD-CMP-02`. |
 | 2026-08-23 | v1.1.4 | 完成 `PD-CAN-02`：接入 8px 网格、6px 智能吸附、拖拽参考线、多选对齐/等间距、Alt 绕过吸附和历史事务；补充 guides fixture、20 项 Electron E2E 与完整门禁结果；同步 `WORK_STATUS.md`、README 和本计划。 |
+| 2026-08-23 | v1.1.3 | 完成 `PD-CAN-01`：将 viewport composable 接入 Builder 主渲染路径，补齐缩放、Fit Page/Selection、Space/中键平移和独立 viewport E2E；同步 `WORK_STATUS.md` 为 `finished`，其余画布增强继续保持 `planned`。 |
+| 2026-08-23 | v1.1.2 | 更新 Phase 0 快照：`PD-ARC-01`、`PD-HIS-01`、`PD-DAT-01`、`PD-QA-03`、`PD-QA-01`、`PD-ARC-02`、`PD-STY-01`、`PD-WKF-01`、`PD-CAN-01` 标记为 `finished`；补充 viewport 真实接入、交付物、验证结果、已知限制和后续动作；同步工作项表与执行顺序，其余工作包继续保持 `planned`。 |
 

@@ -1,6 +1,5 @@
 ﻿<script setup lang="ts">
 import AppRouteNavigation from '../shared/AppRouteNavigation.vue'
-import AppTopbar from '../shared/AppTopbar.vue'
 import HomeView from './HomeView.vue'
 
 import type { AppShellUi } from '../shared/appShellTypes'
@@ -12,7 +11,6 @@ defineProps<{ ui: AppState }>()
 <template>
   <div class="app-shell module-shell home-shell">
     <main class="main-column">
-      <AppTopbar :ui="ui" mode="home" />
       <AppRouteNavigation :ui="ui" mode="home" />
       <HomeView :ui="ui" />
     </main>

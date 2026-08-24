@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, session, shell, webContents, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, webContents, type IpcMainInvokeEvent } from 'electron'
 import { mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
@@ -122,12 +122,12 @@ function getDatabaseClient() {
 }
 
 function getCollaborationHub() {
-  if (!collaborationHub) throw new Error('协作模块尚未初始化')
+  if (!collaborationHub) throw new Error('Collaboration module is not initialized')
   return collaborationHub
 }
 
 function getPluginRegistry() {
-  if (!pluginRegistry) throw new Error('本地插件注册表尚未初始化')
+  if (!pluginRegistry) throw new Error('Plugin registry is not initialized')
   return pluginRegistry
 }
 
@@ -201,9 +201,41 @@ function registerCollaborationHandlers() {
   ipcMain.handle('lowcode:collaboration-open-window', async (event) => {
     assertTrustedSender(event)
     const session = getCollaborationHub().getSession(event.sender)
-    if (!session || session.mode !== 'same-device') throw new Error('当前会话不支持同机多窗口')
+    if (!session || session.mode !== 'same-device') throw new Error('The current session does not support same-device windows')
     await createWindow(session.id)
     return { success: true }
+  })
+}
+
+function getWindowForEvent(event: IpcMainInvokeEvent) {
+  const target = BrowserWindow.fromWebContents(event.sender)
+  if (!target || target.isDestroyed()) throw new Error('Window is no longer available')
+  return target
+}
+
+function registerWindowHandlers() {
+  ipcMain.handle('window:minimize', event => {
+    assertTrustedSender(event)
+    getWindowForEvent(event).minimize()
+    return { success: true }
+  })
+  ipcMain.handle('window:toggle-maximize', event => {
+    assertTrustedSender(event)
+    const target = getWindowForEvent(event)
+    if (target.isMaximized()) target.unmaximize()
+    else target.maximize()
+    const maximized = target.isMaximized()
+    target.webContents.send('window:state', { maximized })
+    return { maximized }
+  })
+  ipcMain.handle('window:close', event => {
+    assertTrustedSender(event)
+    getWindowForEvent(event).close()
+    return { success: true }
+  })
+  ipcMain.handle('window:get-state', event => {
+    assertTrustedSender(event)
+    return { maximized: getWindowForEvent(event).isMaximized() }
   })
 }
 
@@ -229,11 +261,11 @@ function registerIpcHandlers() {
   ipcMain.handle('lowcode:export-design-exchange', async (event, documentFile: DesignExchangeDocument) => {
     assertTrustedSender(event)
     const content = serializeDesignExchangeDocument(documentFile)
-    if (Buffer.byteLength(content, 'utf8') > MAX_DESIGN_EXCHANGE_BYTES) throw new Error('???????? 25 MB??????')
+    if (Buffer.byteLength(content, 'utf8') > MAX_DESIGN_EXCHANGE_BYTES) throw new Error('Design exchange exceeds 25 MB and was rejected')
     const result = await dialog.showSaveDialog(win || undefined, {
-      title: '??????????',
+      title: 'Export Codeless design exchange',
       defaultPath: path.join(app.getPath('documents'), `${safeFileStem(documentFile?.name || 'codeless-design')}.codeless-design.json`),
-      filters: [{ name: 'Codeless ??????', extensions: ['json'] }],
+      filters: [{ name: 'Codeless design exchange', extensions: ['json'] }],
     })
     if (result.canceled || !result.filePath) return { canceled: true }
     await writeTextAtomically(result.filePath, content)
@@ -257,24 +289,44 @@ function registerIpcHandlers() {
     return { canceled: false, filePath: result.filePath }
   })
 
+  ipcMain.handle('lowcode:import-review-package', async (event) => {
+    assertTrustedSender(event)
+    const result = await dialog.showOpenDialog(win || undefined, {
+      title: 'Import Codeless local review package',
+      properties: ['openFile'],
+      filters: [{ name: 'Codeless review package', extensions: ['json'] }],
+    })
+    if (result.canceled || !result.filePaths[0]) return { canceled: true }
+    const filePath = result.filePaths[0]
+    const fileInfo = await stat(filePath)
+    if (fileInfo.size > MAX_CODELESS_FILE_BYTES) throw new Error('Review package exceeds 50 MB and was rejected')
+    let reviewPackage: unknown
+    try {
+      reviewPackage = JSON.parse(await readFile(filePath, 'utf8'))
+    } catch {
+      throw new Error('Review package is not valid JSON')
+    }
+    return { canceled: false, filePath, reviewPackage }
+  })
+
   ipcMain.handle('lowcode:import-asset', async (event): Promise<LocalAssetImportResult> => {
     assertTrustedSender(event)
     const result = await dialog.showOpenDialog(win || undefined, {
-      title: '导入本地素材',
+      title: 'Import local asset',
       properties: ['openFile'],
-      filters: [{ name: '图片与 SVG', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'] }],
+      filters: [{ name: 'Images and SVG', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'] }],
     })
     if (result.canceled || !result.filePaths[0]) return { canceled: true }
     const filePath = result.filePaths[0]
     const extension = path.extname(filePath).toLowerCase()
     const mimeType = LOCAL_ASSET_MIME_TYPES[extension]
-    if (!mimeType) throw new Error('仅支持 PNG、JPG、WEBP、GIF 和 SVG 素材')
+    if (!mimeType) throw new Error('Only PNG, JPG, WEBP, GIF, and SVG assets are supported')
     const fileInfo = await stat(filePath)
-    if (fileInfo.size > MAX_LOCAL_ASSET_BYTES) throw new Error('本地素材超过 10 MB，已拒绝读取')
+    if (fileInfo.size > MAX_LOCAL_ASSET_BYTES) throw new Error('Local asset exceeds 10 MB and was rejected')
     const buffer = await readFile(filePath)
     if (extension === '.svg') {
       const svg = buffer.toString('utf8')
-      if (/<script\b|\bon[a-z]+\s*=|javascript:/i.test(svg)) throw new Error('SVG 包含脚本或事件属性，已拒绝导入')
+      if (/<script\b|\bon[a-z]+\s*=|javascript:/i.test(svg)) throw new Error('SVG contains script or event attributes and was rejected')
     }
     return {
       canceled: false,
@@ -288,14 +340,14 @@ function registerIpcHandlers() {
   ipcMain.handle('lowcode:import-design-exchange', async (event) => {
     assertTrustedSender(event)
     const result = await dialog.showOpenDialog(win || undefined, {
-      title: '??????????',
+      title: 'Import Codeless design exchange',
       properties: ['openFile'],
-      filters: [{ name: 'Codeless ??????', extensions: ['json'] }],
+      filters: [{ name: 'Codeless design exchange', extensions: ['json'] }],
     })
     if (result.canceled || !result.filePaths[0]) return { canceled: true }
     const filePath = result.filePaths[0]
     const fileInfo = await stat(filePath)
-    if (fileInfo.size > MAX_DESIGN_EXCHANGE_BYTES) throw new Error('???????? 25 MB??????')
+    if (fileInfo.size > MAX_DESIGN_EXCHANGE_BYTES) throw new Error('Design exchange exceeds 25 MB and was rejected')
     const documentFile = parseDesignExchangeDocument(await readFile(filePath, 'utf8'))
     return { canceled: false, filePath, document: documentFile }
   })
@@ -380,9 +432,9 @@ function registerIpcHandlers() {
   ipcMain.handle('lowcode:install-plugin', async (event) => {
     assertTrustedSender(event)
     const result = await dialog.showOpenDialog(win || undefined, {
-      title: '安装本地插件',
+      title: 'Install local plugin',
       properties: ['openFile'],
-      filters: [{ name: 'Codeless 插件 manifest', extensions: ['json'] }],
+      filters: [{ name: 'Codeless plugin manifest', extensions: ['json'] }],
     })
     if (result.canceled || !result.filePaths[0]) return { canceled: true }
     const plugin = await getPluginRegistry().install(result.filePaths[0])
@@ -413,6 +465,8 @@ async function createWindow(sessionId?: string) {
     minWidth: 1180,
     minHeight: 720,
     backgroundColor: '#f5f6fa',
+    frame: false,
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload,
@@ -427,6 +481,9 @@ async function createWindow(sessionId?: string) {
   const createdWebContents = createdWindow.webContents
   windows.add(createdWindow)
   if (!win) win = createdWindow
+  const syncWindowState = () => createdWindow.webContents.send('window:state', { maximized: createdWindow.isMaximized() })
+  createdWindow.on('maximize', syncWindowState)
+  createdWindow.on('unmaximize', syncWindowState)
   createdWindow.webContents.on('will-navigate', (event, url) => {
     if (isTrustedAppUrl(url)) return
     event.preventDefault()
@@ -458,11 +515,13 @@ async function createWindow(sessionId?: string) {
 }
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null)
   await initializeDatabase()
   pluginRegistry = new PluginRegistry(app.getPath('userData'))
   await pluginRegistry.ensureDirectory()
   configureOfflineSession()
   registerIpcHandlers()
+  registerWindowHandlers()
   collaborationHub = new CollaborationHub((webContentsId, event) => {
     const contents = webContents.fromId(webContentsId)
     if (contents && !contents.isDestroyed()) contents.send('lowcode:collaboration-event', event)

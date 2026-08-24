@@ -1,6 +1,7 @@
-﻿export interface DesignerPersistenceScheduler {
+export interface DesignerPersistenceScheduler {
   schedule: (flushHistory: () => void, isDirty: () => boolean) => void
   clear: () => void
+  flush: (flushHistory: () => void, isDirty: () => boolean) => Promise<void>
 }
 
 function getStorage() {
@@ -54,14 +55,19 @@ export function createDesignerPersistence(options: {
     autoSaveTimer = null
   }
 
+  async function flush(flushHistory: () => void, isDirty: () => boolean) {
+    clear()
+    flushHistory()
+    if (isDirty()) await options.saveProject(options.message || '????')
+  }
+
   function schedule(flushHistory: () => void, isDirty: () => boolean) {
     clear()
     autoSaveTimer = setTimeout(() => {
       autoSaveTimer = null
-      flushHistory()
-      if (isDirty()) void options.saveProject(options.message || '自动保存')
+      void flush(flushHistory, isDirty)
     }, delayMs)
   }
 
-  return { schedule, clear }
+  return { schedule, flush, clear }
 }

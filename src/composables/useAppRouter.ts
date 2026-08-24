@@ -14,7 +14,7 @@ type PageEventHandler = (payload: unknown, context: { event: string; route: AppR
 
 interface AppRouterOptions {
   currentProject: ComputedRef<LowCodeProject | undefined>
-  selectPage: (pageId: string) => boolean
+  selectPage: (pageId: string) => boolean | Promise<boolean>
   notify: (message: string, tone?: 'success' | 'info' | 'danger') => void
   isDirty?: () => boolean
 }
@@ -176,7 +176,7 @@ export function useAppRouter(options: AppRouterOptions) {
     const to = resolved.location
     const allowed = await runGuards(to, from, resolved.route, resolved.page, redirectDepth)
     if (!allowed) return false
-    if (!options.selectPage(resolved.page.id)) return false
+    if (!await options.selectPage(resolved.page.id)) return false
     if (!skipHistory && from && (from.pageId !== to.pageId || from.path !== to.path)) history.value.push({ ...from, params: { ...from.params }, state: { ...from.state } })
     currentRoute.value = to
     Object.keys(routeState).forEach(key => delete routeState[key])

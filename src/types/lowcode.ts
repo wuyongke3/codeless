@@ -78,6 +78,34 @@ export interface DesignSystem {
 }
 
 export type ReviewCommentStatus = 'open' | 'resolved'
+export type ReviewActivityAction = 'snapshot-created' | 'snapshot-deleted' | 'comment-created' | 'comment-updated' | 'comment-resolved' | 'comment-reopened' | 'package-imported'
+
+export interface ReviewAttachment {
+  id: string
+  name: string
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+  size: number
+  dataUrl: string
+  createdAt: string
+}
+
+export interface ReviewActivity {
+  id: string
+  action: ReviewActivityAction
+  message: string
+  createdAt: string
+  snapshotId?: string
+  commentId?: string
+}
+
+export interface ReviewVersionContext {
+  projectId: string
+  projectName: string
+  projectUpdatedAt: string
+  snapshotId?: string
+  snapshotName?: string
+  snapshotSourceUpdatedAt?: string
+}
 
 export interface ProjectSnapshot {
   id: string
@@ -97,6 +125,7 @@ export interface ReviewComment {
   x?: number
   y?: number
   text: string
+  attachments?: ReviewAttachment[]
   status: ReviewCommentStatus
   createdAt: string
   updatedAt: string
@@ -105,6 +134,7 @@ export interface ReviewComment {
 export interface ProjectReviewState {
   snapshots: ProjectSnapshot[]
   comments: ReviewComment[]
+  activity: ReviewActivity[]
   activeSnapshotId?: string
 }
 
@@ -135,9 +165,11 @@ export interface ReviewPackage {
   format: 'codeless-review'
   schemaVersion: 1
   exportedAt: string
+  versionContext: ReviewVersionContext
   project: Omit<LowCodeProject, 'review'>
   snapshot?: ProjectSnapshot
   comments: ReviewComment[]
+  activity: ReviewActivity[]
   diff?: ProjectDiff
 }
 
@@ -316,6 +348,41 @@ export interface WidgetMetaConfig {
 /**
  * 组件统一配置协议。props 仅作为旧版兼容层，新组件和运行时优先使用 config。
  */
+/** A reusable, project-local component definition. */
+export interface ComponentDefinition {
+  id: string
+  name: string
+  type: WidgetType
+  version: number
+  createdAt: string
+  updatedAt: string
+  /** A layout-free template. Instance placement remains local to each node. */
+  template: {
+    name: string
+    config: WidgetConfig
+  }
+  variantProperties?: Record<string, string[]>
+}
+
+export interface ComponentOverride {
+  /** Dot path rooted at WidgetConfig, such as content.text or style.color. */
+  path: string
+  value: unknown
+}
+
+export interface ComponentConflict {
+  path: string
+  message: string
+}
+
+export interface WidgetComponentLink {
+  role: 'definition' | 'instance'
+  definitionId: string
+  sourceVersion: number
+  overrides?: ComponentOverride[]
+  conflicts?: ComponentConflict[]
+}
+
 export interface WidgetConfig {
   version: 1
   layout: WidgetLayoutConfig
@@ -324,6 +391,8 @@ export interface WidgetConfig {
   /** ????????? button.content.variant ????? */
   variant?: string
   variants?: Record<string, WidgetVariantConfig>
+  /** Optional link to a project-local reusable component definition. */
+  component?: WidgetComponentLink
   data: WidgetDataBinding
   validation: WidgetValidation
   interaction: WidgetInteractionConfig
@@ -394,6 +463,9 @@ export interface PageLayout {
   version: number
   pageName: string
   canvas: {
+    /** Editor-only logical placement of this page inside the design viewport. */
+    x?: number
+    y?: number
     width: number
     height: number
     background: string
@@ -438,6 +510,8 @@ export interface LowCodeProject {
   /** ????????????? Diff???????????? */
   review?: ProjectReviewState
   /** 多页面扩展；旧项目仅有 layout 时由 normalizeProject 自动补齐。 */
+  /** Project-local reusable components; no network library is required. */
+  componentDefinitions?: ComponentDefinition[]
   pages?: LowCodePage[]
   entryPageId?: string
   currentPageId?: string
@@ -477,6 +551,12 @@ export interface ProjectFileImportResult {
 export interface ReviewPackageExportResult {
   canceled: boolean
   filePath?: string
+}
+
+export interface ReviewPackageImportResult {
+  canceled: boolean
+  filePath?: string
+  reviewPackage?: unknown
 }
 
 export interface LocalAssetImportResult {
@@ -536,11 +616,21 @@ export interface DataQuery extends DataQueryOptions {
   table: string
 }
 
+export interface WindowControlsApi {
+  minimize: () => Promise<{ success: boolean }>
+  toggleMaximize: () => Promise<{ maximized: boolean }>
+  close: () => Promise<{ success: boolean }>
+  getState: () => Promise<{ maximized: boolean }>
+  onStateChange: (listener: (state: { maximized: boolean }) => void) => () => void
+}
+
 export interface LowCodeApi {
+  window: WindowControlsApi
   bootstrap: () => Promise<BootstrapData>
   saveProject: (project: LowCodeProject) => Promise<LowCodeProject>
   exportProject: (project: LowCodeProject) => Promise<ProjectFileExportResult>
   exportReviewPackage: (reviewPackage: ReviewPackage) => Promise<ReviewPackageExportResult>
+  importReviewPackage: () => Promise<ReviewPackageImportResult>
   exportDesignExchange: (document: DesignExchangeDocument) => Promise<DesignExchangeExportResult>
   importAsset: () => Promise<LocalAssetImportResult>
   importProject: () => Promise<ProjectFileImportResult>

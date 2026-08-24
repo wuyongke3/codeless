@@ -18,12 +18,26 @@ const collaboration: CollaborationApi = {
   },
 }
 
+const windowControls = {
+  minimize: () => ipcRenderer.invoke('window:minimize'),
+  toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
+  close: () => ipcRenderer.invoke('window:close'),
+  getState: () => ipcRenderer.invoke('window:get-state'),
+  onStateChange: (listener: (state: { maximized: boolean }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: { maximized: boolean }) => listener(state)
+    ipcRenderer.on('window:state', handler)
+    return () => ipcRenderer.removeListener('window:state', handler)
+  },
+}
+
 // Only expose the small, typed surface that the renderer needs.
 contextBridge.exposeInMainWorld('lowcode', {
+  window: windowControls,
   bootstrap: () => ipcRenderer.invoke('lowcode:bootstrap'),
   saveProject: (project: LowCodeProject) => ipcRenderer.invoke('lowcode:save-project', project),
   exportProject: (project: LowCodeProject) => ipcRenderer.invoke('lowcode:export-project', project),
   exportReviewPackage: (reviewPackage: ReviewPackage) => ipcRenderer.invoke('lowcode:export-review-package', reviewPackage),
+  importReviewPackage: () => ipcRenderer.invoke('lowcode:import-review-package'),
   exportDesignExchange: (document: DesignExchangeDocument) => ipcRenderer.invoke('lowcode:export-design-exchange', document),
   importAsset: (): Promise<LocalAssetImportResult> => ipcRenderer.invoke('lowcode:import-asset'),
   importProject: () => ipcRenderer.invoke('lowcode:import-project'),

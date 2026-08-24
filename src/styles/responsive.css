@@ -1,6 +1,6 @@
 /* Shared responsive and flexible layout rules. */
 @media (max-width:1320px){.builder-layout{grid-template-columns:195px minmax(0,1fr) 240px}.project-grid{grid-template-columns:repeat(3,minmax(200px,1fr))}.global-search{width:190px}.welcome-copy h2{font-size:25px}.metric-card{padding:14px 12px}.flow-node{width:205px}.flow-node.trigger{left:8%}.flow-node.action{left:73%}}
-@media (max-width:1120px){.metric-grid{grid-template-columns:repeat(2,1fr)}.project-grid{grid-template-columns:repeat(2,minmax(200px,1fr))}.topbar-actions .global-search{display:none}.builder-actions .save-state{display:none}}
+@media (max-width:1120px){.metric-grid{grid-template-columns:repeat(2,1fr)}.project-grid{grid-template-columns:repeat(2,minmax(200px,1fr))}.topbar-actions .global-search{display:none}.builder-save-state span{display:none}}
 
 html, body, #app { min-width: 0; min-height: 0; }
 .app-shell { grid-template-columns: minmax(0, 1fr); height: 100dvh; min-height: 100vh; }
@@ -17,7 +17,7 @@ html, body, #app { min-width: 0; min-height: 0; }
 .builder-breadcrumb { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .builder-center-tools { z-index: 2; }
 .builder-actions { min-width: 0; }
-.builder-actions .save-state { white-space: nowrap; }
+.builder-save-state { white-space: nowrap; }
 .builder-layout { min-width: 0; min-height: 0; flex: 1 1 0; height: 0; grid-template-columns: minmax(170px, min(var(--component-panel-width, 218px), 28vw)) minmax(0, 1fr) minmax(220px, min(var(--inspector-panel-width, 260px), 32vw)); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
 .component-panel, .inspector-panel { min-width: 0; min-height: 0; width: 100%; overflow: hidden; }
 .component-scroll, .inspector-scroll, .events-panel { min-height: 0; overflow: auto; overscroll-behavior: contain; }
@@ -43,10 +43,10 @@ html, body, #app { min-width: 0; min-height: 0; }
 
 @media (max-width: 1180px) {
   .topbar { padding-inline: 16px; }
-  .builder-center-tools { position: static; transform: none; }
   .builder-layout { grid-template-columns: minmax(160px, min(var(--component-panel-width, 218px), 28vw)) minmax(0, 1fr) minmax(200px, min(var(--inspector-panel-width, 260px), 32vw)); }
   .global-search { width: min(220px, 22vw); }
-  .builder-actions .save-state { display: none; }
+  .builder-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+  .builder-project-name, .builder-save-state span { display: none; }
 }
 
 @media (max-width: 900px) {
@@ -59,8 +59,9 @@ html, body, #app { min-width: 0; min-height: 0; }
   .topbar-title { min-width: 0; }
   .topbar-title > div { min-width: 0; }
   .topbar-title h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .builder-toolbar { flex-wrap: wrap; height: auto; min-height: 50px; padding: 7px 10px; gap: 6px; }
-  .builder-center-tools { order: 3; width: 100%; justify-content: center; }
+  .builder-toolbar { display: flex; flex-wrap: wrap; height: auto; min-height: 50px; padding: 7px 10px; gap: 6px; }
+  .builder-context { flex: 1 1 auto; }
+  .builder-center-tools { order: 3; margin-inline: auto; }
   .builder-actions { margin-left: auto; }
   .builder-layout { grid-template-columns: minmax(0, 1fr); overflow: auto; }
   .component-panel, .inspector-panel { display: none; }
@@ -105,4 +106,58 @@ html, body, #app { min-width: 0; min-height: 0; }
   .flow-add.a1 { left: 45%; }
   .flow-add.a2 { left: 78%; }
   .flow-hint { width: max-content; max-width: calc(100% - 24px); text-align: center; }
+}
+
+
+/* 2026 responsive density pass: scale the complete app content, not pointer coordinates or the design canvas model. */
+.app-content-shell {
+  width: calc(100% / var(--ui-scale));
+  height: calc(100dvh - var(--window-titlebar-height));
+  min-width: 0;
+  min-height: 0;
+  zoom: var(--ui-scale);
+}
+.app-content-shell > .app-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.app-content-shell .main-column { height: 100%; min-height: 0; }
+.app-content-shell .route-navigation { font-size: var(--font-sm); }
+.app-content-shell .route-navigation-main { gap: clamp(8px, .72vw, 12px); }
+.app-content-shell .route-navigation-meta { gap: clamp(12px, 1vw, 18px); }
+.app-content-shell .route-brand-copy strong { font-size: clamp(13px, .76rem + .16vw, 16px); }
+.app-content-shell .route-brand-copy small,
+.app-content-shell .route-context-note,
+.app-content-shell .route-tagline { font-size: var(--font-xs); }
+.app-content-shell .route-home-link,
+.app-content-shell .route-tab { min-height: clamp(32px, 2.35vw, 38px); font-size: var(--font-sm); }
+.app-content-shell .route-create-button { min-height: var(--control-height); font-size: var(--font-sm); }
+.app-content-shell .builder-toolbar { min-height: clamp(52px, 3.3vw, 62px); height: clamp(52px, 3.3vw, 62px); }
+.app-content-shell .builder-toolbar button,
+.app-content-shell .builder-toolbar select { min-height: clamp(32px, 2.25vw, 38px); }
+.app-content-shell .component-panel,
+.app-content-shell .inspector-panel { font-size: var(--font-sm); }
+.app-content-shell .panel-title,
+.app-content-shell .inspector-title,
+.app-content-shell .section-heading h3 { font-size: clamp(14px, .82rem + .22vw, 19px); }
+.app-content-shell .view-scroll { padding: clamp(20px, 2.1vw, 34px) clamp(20px, 2.5vw, 40px) clamp(28px, 3vw, 48px); }
+.app-content-shell .metric-card,
+.app-content-shell .project-card { border-radius: clamp(13px, 1vw, 18px); }
+.app-content-shell button,
+.app-content-shell input,
+.app-content-shell textarea,
+.app-content-shell select { font-size: max(var(--font-xs), 10px); }
+
+@media (max-height: 760px) {
+  :root { --window-titlebar-height: 44px; }
+  .app-content-shell .route-navigation { padding-block: 9px 8px; }
+  .app-content-shell .route-navigation-meta { margin-top: 7px; }
+  .app-content-shell .builder-toolbar { min-height: 48px; height: 48px; }
+}
+
+@media (max-width: 1080px) {
+  .app-content-shell .route-navigation-main { flex-wrap: wrap; }
+  .app-content-shell .route-tabs { min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+  .app-content-shell .route-navigation-meta { margin-top: 8px; }
 }

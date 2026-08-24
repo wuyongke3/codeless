@@ -32,6 +32,9 @@ function execute(command: string) {
     case 'cut': state.cutSelectedWidgets(); break
     case 'paste': state.pasteWidgets(pasteDestinationId.value); break
     case 'duplicate': state.duplicateSelectedWidget(); break
+    case 'createDefinition': state.createSelectedComponentDefinition(); break
+    case 'createInstance': state.createSelectedComponentInstance(); break
+    case 'detachInstance': state.detachSelectedComponentInstance(); break
     case 'rename': state.renameSelectedWidget(); break
     case 'delete': state.removeSelectedWidget(); break
     case 'lock': state.toggleSelectedLocked(); break
@@ -101,6 +104,9 @@ function animateLeave(element: Element, done: () => void) {
       </template>
       <button class="context-menu-item" :disabled="!state.canPaste" :data-menu-command="'paste'" role="menuitem" @click="execute('paste')"><AppIcon name="clipboard" :size="15" /><span>粘贴</span><kbd>Ctrl V</kbd></button>
       <button v-if="hasSelection" :data-menu-command="'duplicate'" class="context-menu-item" role="menuitem" @click="execute('duplicate')"><AppIcon name="copy" :size="15" /><span>复制并粘贴</span><kbd>Ctrl D</kbd></button>
+      <button v-if="hasSelection && !targetWidget?.config?.component" data-menu-command="createDefinition" class="context-menu-item" role="menuitem" @click="execute('createDefinition')"><AppIcon name="layers" :size="15" /><span>Create master component</span></button>
+      <button v-else-if="hasSelection && targetWidget?.config?.component" data-menu-command="createInstance" class="context-menu-item" role="menuitem" @click="execute('createInstance')"><AppIcon name="copy" :size="15" /><span>Insert component instance</span></button>
+      <button v-if="hasSelection && targetWidget?.config?.component?.role === 'instance'" data-menu-command="detachInstance" class="context-menu-item" role="menuitem" @click="execute('detachInstance')"><AppIcon name="unlink" :size="15" /><span>Detach instance</span></button>
 
       <div class="context-menu-separator"></div>
 

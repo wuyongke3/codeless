@@ -1,7 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, reactive } from 'vue'
 import AppRouteNavigation from '../shared/AppRouteNavigation.vue'
-import AppTopbar from '../shared/AppTopbar.vue'
 import ActivityView from '../../views/ActivityView.vue'
 import BuilderView from '../../views/BuilderView.vue'
 import DataModelView from '../../views/DataModelView.vue'
@@ -26,7 +25,6 @@ const currentView = computed(() => {
 <template>
   <div class="app-shell module-shell workspace-shell">
     <main class="main-column">
-      <AppTopbar :ui="ui" mode="workspace" />
       <AppRouteNavigation :ui="ui" mode="workspace" />
       <component :is="currentView" :ui="ui" />
     </main>

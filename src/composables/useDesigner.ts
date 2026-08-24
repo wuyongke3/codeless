@@ -12,6 +12,18 @@ import type { DesignerHistoryOptions } from './designer/collaboration'
 import { useDesignerCanvasViewport } from './designerCanvasViewport'
 import { alignFrames, distributeFrames, getCanvasGuideBounds, smartSnapFrame } from './designer/canvasGuides'
 import type { CanvasGuideFrame, CanvasGuideLine } from '../types/designerCanvasGuides'
+import {
+  componentInstanceCount,
+  createComponentDefinition,
+  createComponentInstance,
+  detachComponentInstance,
+  getComponentDefinition,
+  getComponentLink,
+  migrateLegacyVariantsToComponent,
+  publishComponentDefinition,
+  recordComponentInstanceOverrides,
+  refreshComponentInstance,
+} from './designer/components'
 
 export type { DesignerHistoryOptions } from './designer/collaboration'
 
@@ -93,6 +105,8 @@ export function useDesigner(
   const inspectorTab = ref<'properties' | 'events'>('properties')
   const zoom = ref(0.78)
   const dirty = ref(false)
+  // Monotonic edit version used to reject late persistence responses.
+  const dirtyRevision = ref(0)
   const canvasRef = ref<HTMLElement | null>(null)
   const canvasViewportRef = ref<HTMLElement | null>(null)
   const canvasViewportVersion = ref(0)
@@ -422,8 +436,13 @@ export function useDesigner(
 
   function markDirty(options: { preserveHistory?: boolean } = {}) {
     history.recordDirty(options)
+    dirtyRevision.value += 1
     dirty.value = true
     persistence.schedule(history.flushHistory, () => dirty.value)
+  }
+
+  function flushAutoSave() {
+    return persistence.flush(history.flushHistory, () => dirty.value)
   }
 
   function clearAutoSaveTimer() {
@@ -1755,9 +1774,85 @@ export function useDesigner(
     markDirty()
   }
 
+  const selectedComponentDefinition = computed(() => {
+    const widget = selectedWidget.value
+    const link = getComponentLink(widget)
+    return link ? getComponentDefinition(currentProject.value, link.definitionId) : undefined
+  })
+  const selectedComponentInstanceCount = computed(() => {
+    const definition = selectedComponentDefinition.value
+    return definition ? componentInstanceCount(currentProject.value, definition.id) : 0
+  })
+
+  function createSelectedComponentDefinition(migrateLegacyVariants = false) {
+    const project = currentProject.value
+    const widget = selectedWidget.value
+    if (!project || !widget) return false
+    if (getComponentLink(widget)?.role === 'definition') {
+      notify('??????????', 'info')
+      return false
+    }
+    pushHistory()
+    const definition = migrateLegacyVariants
+      ? migrateLegacyVariantsToComponent(project, widget)
+      : createComponentDefinition(project, widget)
+    if (!definition) {
+      notify('?????????? legacy ??', 'info')
+      return false
+    }
+    markDirty()
+    notify('???????' + definition.name + '?')
+    return true
+  }
+
+  function createSelectedComponentInstance() {
+    const project = currentProject.value
+    const widget = selectedWidget.value
+    if (!project || !widget) return false
+    const link = getComponentLink(widget)
+    if (!link) {
+      notify('???????????', 'info')
+      return false
+    }
+    pushHistory()
+    const instance = createComponentInstance(project, widget)
+    if (!instance) return false
+    selectWidget(instance.id)
+    markDirty()
+    notify('????' + instance.name + '???')
+    return true
+  }
+
+  function refreshSelectedComponentInstance(mode: 'preserve-overrides' | 'reset-overrides' = 'preserve-overrides') {
+    const project = currentProject.value
+    const widget = selectedWidget.value
+    if (!project || !widget) return false
+    pushHistory()
+    if (!refreshComponentInstance(project, widget, mode)) return false
+    markDirty()
+    notify(mode === 'reset-overrides' ? '?????????????' : '?????????????')
+    return true
+  }
+
+  function detachSelectedComponentInstance() {
+    const widget = selectedWidget.value
+    if (!widget) return false
+    pushHistory()
+    if (!detachComponentInstance(widget)) return false
+    markDirty()
+    notify('????????????')
+    return true
+  }
+
   function syncWidget(widget: LowCodeWidget | undefined) {
     if (!widget) return
     normalizeWidget(widget)
+    const project = currentProject.value
+    if (project) {
+      const link = getComponentLink(widget)
+      if (link?.role === 'definition') publishComponentDefinition(project, widget)
+      else if (link?.role === 'instance') recordComponentInstanceOverrides(project, widget)
+    }
     beginExternalHistory()
     markDirty({ preserveHistory: true })
   }
@@ -1951,7 +2046,7 @@ export function useDesigner(
     }
     if (command && event.key.toLowerCase() === 's') {
       event.preventDefault()
-      void saveProject()
+      void flushAutoSave()
       return
     }
     if (!editing && command && event.key.toLowerCase() === 'z') {
@@ -2054,7 +2149,8 @@ export function useDesigner(
     window.removeEventListener('pointercancel', stopCanvasSelection)
     window.removeEventListener('pointermove', queueResizeWidget)
     window.removeEventListener('pointercancel', stopWidgetResize)
-    clearAutoSaveTimer()
+    // Do not discard a final debounced save solely because Builder unmounts.
+    void flushAutoSave()
     history.dispose()
     stopCanvasSelection({ type: 'pointercancel' } as PointerEvent)
     stopWidgetMove()
@@ -2064,18 +2160,18 @@ export function useDesigner(
 
   return {
     isWidgetLocked, isWidgetSelfLocked,
-    selectedWidgetId, selectedWidgetIds, selectedWidgets, paletteSearch, paletteTab, inspectorTab, zoom, dirty, canvasRef, canvasViewportRef, canvasViewport, canvasRootWidgets, canvasChildrenFor, canvasVisibleWidgetIds, updateCanvasViewport, historyStack, futureStack,
+    selectedWidgetId, selectedWidgetIds, selectedWidgets, paletteSearch, paletteTab, inspectorTab, zoom, dirty, dirtyRevision, canvasRef, canvasViewportRef, canvasViewport, canvasRootWidgets, canvasChildrenFor, canvasVisibleWidgetIds, updateCanvasViewport, historyStack, futureStack,
     gridEnabled, snapEnabled, showCanvasGuides, gridSize, canvasGuideLines, canvasGridStyle,
     largeProjectMode, webglAcceleration, webglSupported, webglWidgetIds, webglWidgets, performanceSummary, isWebGLWidget, setWebGLSupported, toggleWebGLAcceleration, webglWidgetFrame,
-    markDirty, flushHistory, clearFutureHistory, beginExternalHistory, syncHistoryBaseline,
-    selectedWidget, filteredGroups, layerWidgets, componentPanelWidth, inspectorPanelWidth, panelResizeSide, draggingWidgetId, draggingWidgetIds, dropTargetContainerId, selectionBox, setDropTargetContainer,
+    markDirty, flushAutoSave, flushHistory, clearFutureHistory, beginExternalHistory, syncHistoryBaseline,
+    selectedWidget, selectedComponentDefinition, selectedComponentInstanceCount, filteredGroups, layerWidgets, componentPanelWidth, inspectorPanelWidth, panelResizeSide, draggingWidgetId, draggingWidgetIds, dropTargetContainerId, selectionBox, setDropTargetContainer,
     inlineEditingWidgetId, inlineEditingField, inlineEditingValue, isInlineEditing, startInlineEdit, commitInlineEdit, cancelInlineEdit,
     zoomBy, fitCanvas,
     pushHistory, undo, redo, selectWidget, handleWidgetClick, handleWidgetContextMenu, handleCanvasContextMenu, closeContextMenu, repositionContextMenu, contextMenu, canPaste, clearSelection, canDropIntoContainer, startPaletteDrag, addWidget, onCanvasDrop, handleCanvasWheel, moveLayerToIndex, reorderWidgetsByLayer, reparentWidget,
     startPanelResize, startCanvasSelection, handleCanvasClick, insertWidgets, handleCanvasPanPointerDown, handleCanvasPanPointerMove, handleCanvasPanPointerUp, handleCanvasPanPointerCancel, handleCanvasViewportKeydown, handleCanvasViewportKeyup,
     startWidgetMove, startWidgetResize, removeSelectedWidget, duplicateSelectedWidget, copySelectedWidgets, cutSelectedWidgets, pasteWidgets, renameSelectedWidget, selectAllWidgets, bringToFront, sendToBack, moveSelectedLayer, canMoveSelectedLayer,
     alignSelectedWidgets, distributeSelectedWidgets, toggleCanvasGrid, toggleCanvasSnap,
-    toggleSelectedLocked, toggleSelectedHidden, syncWidget, updateWidgetVariant, updateWidgetTokenRef, updateDataSource, updateSubmitTarget, updateColumns, updateOptions, serializeWidgetColumns, serializeWidgetOptions, widgetStyle, resetDesigner,
+    toggleSelectedLocked, toggleSelectedHidden, createSelectedComponentDefinition, createSelectedComponentInstance, refreshSelectedComponentInstance, detachSelectedComponentInstance, syncWidget, updateWidgetVariant, updateWidgetTokenRef, updateDataSource, updateSubmitTarget, updateColumns, updateOptions, serializeWidgetColumns, serializeWidgetOptions, widgetStyle, resetDesigner,
     addWidgetEvent, removeWidgetEvent, addEventAction, removeEventAction,
   }
 }

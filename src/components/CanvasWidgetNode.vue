@@ -1,5 +1,75 @@
+<script lang="ts">
+let mountedNodeCount = 0
+let spacePressed = false
+const spacePanPointers = new Map<number, HTMLElement>()
+const spacePanCleanupTimers = new Map<number, ReturnType<typeof setTimeout>>()
+
+function isEditableTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+}
+
+function trackSpaceKeydown(event: KeyboardEvent) {
+  if (event.code === 'Space' && !isEditableTarget(event.target)) spacePressed = true
+}
+
+function trackSpaceKeyup(event: KeyboardEvent) {
+  if (event.code === 'Space') spacePressed = false
+}
+
+function resetSpacePanTracking() {
+  spacePressed = false
+}
+
+function trackSpacePanPointerDown(event: PointerEvent) {
+  if (event.button !== 0 || !spacePressed || !(event.target instanceof Element)) return
+  const widgetNode = event.target.closest<HTMLElement>('[data-widget-id]')
+  if (widgetNode) spacePanPointers.set(event.pointerId, widgetNode)
+}
+
+function clearSpacePanPointer(pointerId: number) {
+  const timer = spacePanCleanupTimers.get(pointerId)
+  if (timer) clearTimeout(timer)
+  spacePanCleanupTimers.delete(pointerId)
+  spacePanPointers.delete(pointerId)
+}
+
+function scheduleSpacePanPointerCleanup(event: PointerEvent) {
+  if (!spacePanPointers.has(event.pointerId)) return
+  if (event.type === 'pointercancel') {
+    clearSpacePanPointer(event.pointerId)
+    return
+  }
+  const timer = setTimeout(() => clearSpacePanPointer(event.pointerId), 0)
+  spacePanCleanupTimers.set(event.pointerId, timer)
+}
+
+function attachSpacePanTracking() {
+  if (typeof window === 'undefined') return
+  window.addEventListener('keydown', trackSpaceKeydown)
+  window.addEventListener('keyup', trackSpaceKeyup)
+  window.addEventListener('blur', resetSpacePanTracking)
+  window.addEventListener('pointerdown', trackSpacePanPointerDown, true)
+  window.addEventListener('pointerup', scheduleSpacePanPointerCleanup, true)
+  window.addEventListener('pointercancel', scheduleSpacePanPointerCleanup, true)
+}
+
+function detachSpacePanTracking() {
+  if (typeof window === 'undefined') return
+  window.removeEventListener('keydown', trackSpaceKeydown)
+  window.removeEventListener('keyup', trackSpaceKeyup)
+  window.removeEventListener('blur', resetSpacePanTracking)
+  window.removeEventListener('pointerdown', trackSpacePanPointerDown, true)
+  window.removeEventListener('pointerup', scheduleSpacePanPointerCleanup, true)
+  window.removeEventListener('pointercancel', scheduleSpacePanPointerCleanup, true)
+  spacePanCleanupTimers.forEach(timer => clearTimeout(timer))
+  spacePanCleanupTimers.clear()
+  spacePanPointers.clear()
+  spacePressed = false
+}
+</script>
+
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import AppIcon from './AppIcon.vue'
 import WidgetRenderer from './WidgetRenderer.vue'
 import type { LowCodeWidget } from '../types/lowcode'
@@ -23,6 +93,49 @@ const selected = computed(() => props.state.selectedWidgetIds.includes(props.wid
 const interactionLocked = computed(() => props.state.isWidgetLocked?.(props.widget.id) ?? Boolean(props.widget.config?.layout?.locked))
 const inlineEditing = computed(() => props.state.isInlineEditing(props.widget.id))
 const renderInWebGL = computed(() => Boolean(props.state.isWebGLWidget?.(props.widget)))
+
+onMounted(() => {
+  mountedNodeCount += 1
+  if (mountedNodeCount === 1) attachSpacePanTracking()
+})
+
+onBeforeUnmount(() => {
+  mountedNodeCount -= 1
+  if (mountedNodeCount === 0) detachSpacePanTracking()
+})
+
+function isTrackedSpacePan(event: PointerEvent) {
+  return event.button === 0 && spacePanPointers.has(event.pointerId)
+}
+
+function handleWidgetPointerDown(event: PointerEvent) {
+  // The canvas capture handler claims Space+primary-button gestures. Do not
+  // consume an event it has already reserved for viewport panning.
+  if (isTrackedSpacePan(event) || event.defaultPrevented) return
+  event.stopPropagation()
+  props.state.startWidgetMove(event, props.widget)
+}
+
+function handleWidgetResizePointerDown(event: PointerEvent, handle: string) {
+  if (isTrackedSpacePan(event) || event.defaultPrevented) return
+  event.stopPropagation()
+  props.state.startWidgetResize(event, props.widget, handle)
+}
+
+function handleWidgetClick(event: MouseEvent) {
+  const widgetNode = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  const pointerId = (event as PointerEvent).pointerId
+  const trackedWidget = typeof pointerId === 'number' ? spacePanPointers.get(pointerId) : undefined
+  if (spacePressed || trackedWidget === widgetNode) {
+    if (typeof pointerId === 'number') clearSpacePanPointer(pointerId)
+    // Keep the existing click boundary so a pan cannot fall through and clear
+    // the selection in the canvas click handler.
+    event.stopPropagation()
+    return
+  }
+  event.stopPropagation()
+  props.state.handleWidgetClick(props.widget.id, event)
+}
 
 function layerDragId(event: DragEvent) {
   return event.dataTransfer?.getData('application/codeless-layer') || ''
@@ -92,11 +205,11 @@ function handleChildrenDrop(event: DragEvent) {
     :data-widget-id="widget.id"
     :data-testid="`canvas-widget-${widget.id}`"
     :data-widget-type="widget.type"
-    :class="['canvas-widget', `widget-${widget.type}`, { selected, dragging: state.draggingWidgetIds?.includes(widget.id) || state.draggingWidgetId === widget.id, 'drop-target': state.dropTargetContainerId === widget.id, locked: interactionLocked, hidden: widget.config?.layout?.hidden, 'webgl-placeholder': renderInWebGL }]"
+    :class="['canvas-widget', `widget-${widget.type}`, { selected, dragging: state.draggingWidgetIds?.includes(widget.id) || state.draggingWidgetId === widget.id, 'drop-target': state.dropTargetContainerId === widget.id, locked: interactionLocked, hidden: widget.config?.layout?.hidden, 'webgl-placeholder': renderInWebGL, 'component-master': widget.config?.component?.role === 'definition', 'component-instance': widget.config?.component?.role === 'instance' }]"
     :aria-selected="selected"
     :style="state.widgetStyle(widget)"
-    @pointerdown.stop="state.startWidgetMove($event, widget)"
-    @click.stop="state.handleWidgetClick(widget.id, $event)"
+    @pointerdown="handleWidgetPointerDown"
+    @click="handleWidgetClick"
     @contextmenu.stop.prevent="state.handleWidgetContextMenu($event, widget.id)"
     @dblclick.stop="state.startInlineEdit(widget, $event)"
     @dragover.prevent="handleDragOver"
@@ -121,7 +234,7 @@ function handleChildrenDrop(event: DragEvent) {
       </template>
     </WidgetRenderer>
     <template v-if="selected && !interactionLocked">
-      <i class="handle nw" @pointerdown.stop="state.startWidgetResize($event, widget, 'nw')"></i><i class="handle n" @pointerdown.stop="state.startWidgetResize($event, widget, 'n')"></i><i class="handle ne" @pointerdown.stop="state.startWidgetResize($event, widget, 'ne')"></i><i class="handle e" @pointerdown.stop="state.startWidgetResize($event, widget, 'e')"></i><i class="handle se" @pointerdown.stop="state.startWidgetResize($event, widget, 'se')"></i><i class="handle s" @pointerdown.stop="state.startWidgetResize($event, widget, 's')"></i><i class="handle sw" @pointerdown.stop="state.startWidgetResize($event, widget, 'sw')"></i><i class="handle w" @pointerdown.stop="state.startWidgetResize($event, widget, 'w')"></i>
+      <i class="handle nw" @pointerdown="handleWidgetResizePointerDown($event, 'nw')"></i><i class="handle n" @pointerdown="handleWidgetResizePointerDown($event, 'n')"></i><i class="handle ne" @pointerdown="handleWidgetResizePointerDown($event, 'ne')"></i><i class="handle e" @pointerdown="handleWidgetResizePointerDown($event, 'e')"></i><i class="handle se" @pointerdown="handleWidgetResizePointerDown($event, 'se')"></i><i class="handle s" @pointerdown="handleWidgetResizePointerDown($event, 's')"></i><i class="handle sw" @pointerdown="handleWidgetResizePointerDown($event, 'sw')"></i><i class="handle w" @pointerdown="handleWidgetResizePointerDown($event, 'w')"></i>
     </template>
   </div>
 </template>

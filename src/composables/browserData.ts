@@ -1,4 +1,4 @@
-import type { BootstrapData, DataQueryOptions, LowCodeApi, LowCodeProject, ProjectFileExportResult, ProjectFileImportResult, LocalAssetImportResult, QueryResult, ReviewPackage, ReviewPackageExportResult, RowInput, TableField, TableMeta, TableRefreshResult } from '../types/lowcode'
+import type { BootstrapData, DataQueryOptions, LowCodeApi, LowCodeProject, ProjectFileExportResult, ProjectFileImportResult, LocalAssetImportResult, QueryResult, ReviewPackage, ReviewPackageExportResult, ReviewPackageImportResult, RowInput, TableField, TableMeta, TableRefreshResult } from '../types/lowcode'
 import type { DesignExchangeDocument, DesignExchangeExportResult, DesignExchangeImportResult } from '../types/designExchange'
 import { parsePluginManifest, type InstalledPlugin, type PluginInstallResult } from '../types/plugin'
 import { clone, fallbackBootstrap, makeId } from './utils'
@@ -491,6 +491,45 @@ export async function browserExportReviewPackage(reviewPackage: ReviewPackage): 
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
   return { canceled: false }
 }
+export async function browserImportReviewPackage(): Promise<ReviewPackageImportResult> {
+  if (typeof document === 'undefined') throw new Error('Current environment does not support local review package import')
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input')
+    let settled = false
+    const cleanup = () => {
+      window.removeEventListener('focus', onWindowFocus)
+      input.remove()
+    }
+    const finish = (result: ReviewPackageImportResult) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(result)
+    }
+    const onWindowFocus = () => window.setTimeout(() => finish({ canceled: true }), 350)
+    input.type = 'file'
+    input.accept = '.json,application/json'
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0]
+      if (!file) return finish({ canceled: true })
+      if (file.size > 50 * 1024 * 1024) {
+        cleanup()
+        reject(new Error('Review package exceeds 50 MB and was rejected'))
+        return
+      }
+      try {
+        finish({ canceled: false, filePath: file.name, reviewPackage: JSON.parse(await file.text()) })
+      } catch {
+        cleanup()
+        reject(new Error('Review package is not valid JSON'))
+      }
+    }, { once: true })
+    window.addEventListener('focus', onWindowFocus, { once: true })
+    document.body.appendChild(input)
+    input.click()
+  })
+}
+
 export async function browserImportAsset(): Promise<LocalAssetImportResult> {
   if (typeof document === 'undefined') throw new Error('当前环境不支持本地素材导入')
   return new Promise((resolve, reject) => {
@@ -624,11 +663,21 @@ const browserCollaboration: import('../types/collaboration').CollaborationApi = 
   onEvent(listener) { browserCollaborationListeners.add(listener); return () => browserCollaborationListeners.delete(listener) },
 }
 
+const browserWindowControls = {
+  minimize: async () => ({ success: false }),
+  toggleMaximize: async () => ({ maximized: false }),
+  close: async () => ({ success: false }),
+  getState: async () => ({ maximized: false }),
+  onStateChange: (_listener: (state: { maximized: boolean }) => void) => () => undefined,
+}
+
 export const browserApi: LowCodeApi = {
+  window: browserWindowControls,
   bootstrap: async () => browserBootstrap(),
   saveProject: async project => browserSaveProject(project),
   exportProject: browserExportProject,
   exportReviewPackage: browserExportReviewPackage,
+  importReviewPackage: browserImportReviewPackage,
   exportDesignExchange: browserExportDesignExchange,
   importAsset: browserImportAsset,
   importProject: browserImportProject,

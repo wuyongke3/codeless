@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+﻿import { app, BrowserWindow } from 'electron'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 
@@ -34,17 +34,17 @@ async function waitFor(predicate, timeout = 10000, interval = 50) {
     if (await predicate()) return
     await sleep(interval)
   }
-  throw new Error(`等待条件超时（${timeout}ms）`)
+  throw new Error(`Wait condition timed out (${timeout}ms)`)
 }
 
 async function runCase(name, fn) {
   try {
     await fn()
     results.push({ name, status: 'passed' })
-    console.log(`✓ ${name}`)
+    console.log(`PASS ${name}`)
   } catch (error) {
     results.push({ name, status: 'failed', error: error instanceof Error ? error.message : String(error) })
-    console.error(`✗ ${name}:`, error)
+    console.error(`FAIL ${name}:`, error)
   }
 }
 
@@ -73,7 +73,7 @@ function widgetSnapshot() {
 async function clickWidget(id, shiftKey = false) {
   return inRenderer((widgetId, additive) => {
     const element = document.querySelector(`[data-widget-id="${widgetId}"]`)
-    if (!element) throw new Error(`找不到组件 ${widgetId}`)
+    if (!element) throw new Error(`鎵句笉鍒扮粍浠?${widgetId}`)
     element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, shiftKey: additive }))
   }, id, shiftKey)
 }
@@ -81,7 +81,7 @@ async function clickWidget(id, shiftKey = false) {
 async function rightClickWidget(id, clientX = 260, clientY = 220) {
   return inRenderer((widgetId, x, y) => {
     const element = document.querySelector(`[data-widget-id="${widgetId}"]`)
-    if (!element) throw new Error(`找不到组件 ${widgetId}`)
+    if (!element) throw new Error(`鎵句笉鍒扮粍浠?${widgetId}`)
     element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: x, clientY: y }))
   }, id, clientX, clientY)
 }
@@ -89,8 +89,8 @@ async function rightClickWidget(id, clientX = 260, clientY = 220) {
 async function clickMenu(command) {
   return inRenderer(commandValue => {
     const button = document.querySelector(`[data-menu-command="${commandValue}"]`)
-    if (!(button instanceof HTMLButtonElement)) throw new Error(`找不到菜单命令 ${commandValue}`)
-    if (button.disabled) throw new Error(`找不到菜单命令 ${commandValue}`)
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
+    if (button.disabled) throw new Error(`鎵句笉鍒拌彍鍗曞懡浠?${commandValue}`)
     button.click()
   }, command)
 }
@@ -98,7 +98,7 @@ async function clickMenu(command) {
 async function rightClickCanvas(clientX = 1400, clientY = 900) {
   return inRenderer((x, y) => {
     const canvas = document.querySelector('.design-canvas')
-    if (!canvas) throw new Error('找不到画布')
+    if (!canvas) throw new Error('design canvas not found')
     canvas.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: x, clientY: y }))
   }, clientX, clientY)
 }
@@ -106,7 +106,7 @@ async function rightClickCanvas(clientX = 1400, clientY = 900) {
 async function clearSelection() {
   return inRenderer(() => {
     const canvas = document.querySelector('.design-canvas')
-    if (!canvas) throw new Error('找不到画布')
+    if (!canvas) throw new Error('design canvas not found')
     canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: 10, clientY: 10 }))
   })
 }
@@ -123,7 +123,7 @@ async function setInspectorField(widgetId, label, value) {
     const section = document.querySelector('.component-config-section')
     const field = Array.from(section.querySelectorAll('.property-field, .property-check')).find(node => node.textContent?.includes(fieldLabel))
     const control = field?.querySelector('input, textarea, select')
-    if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement || control instanceof HTMLSelectElement)) throw new Error(`找不到配置字段：${fieldLabel}`)
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement || control instanceof HTMLSelectElement)) throw new Error(`鎵句笉鍒伴厤缃瓧娈碉細${fieldLabel}`)
     if (control instanceof HTMLInputElement && control.type === 'checkbox') {
       control.checked = Boolean(fieldValue)
       control.dispatchEvent(new Event('change', { bubbles: true }))
@@ -143,8 +143,8 @@ async function widgetIdByType(type) {
 
 async function openPreview() {
   await inRenderer(() => {
-    const button = Array.from(document.querySelectorAll('button.ghost-button.compact')).find(node => node.textContent?.includes('预览'))
-    if (!(button instanceof HTMLButtonElement)) throw new Error('找不到预览按钮')
+    const button = Array.from(document.querySelectorAll('button.ghost-button.compact')).find(node => node.textContent?.includes('\u9884\u89c8'))
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
     button.click()
   })
   await waitFor(() => inRenderer(() => Boolean(document.querySelector('.preview-modal'))))
@@ -154,11 +154,25 @@ async function openPreview() {
 async function closePreview() {
   await inRenderer(() => {
     const button = document.querySelector('.preview-modal > header button')
-    if (!(button instanceof HTMLButtonElement)) throw new Error('找不到预览关闭按钮')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
     button.click()
   })
   await waitFor(() => inRenderer(() => !document.querySelector('.preview-modal')))
 }
+async function openBuilderOverflowMenu() {
+  await inRenderer(() => {
+    const trigger = document.querySelector('.builder-more-trigger')
+    if (!(trigger instanceof HTMLButtonElement)) throw new Error('builder overflow trigger not found')
+    trigger.click()
+  })
+  await waitFor(() => inRenderer(() => Boolean(document.querySelector('[data-testid="builder-overflow-menu"]'))))
+}
+
+async function closeBuilderOverflowMenuWithEscape() {
+  await inRenderer(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+  await waitFor(() => inRenderer(() => !document.querySelector('[data-testid="builder-overflow-menu"]')))
+}
+
 async function main() {
   win = new BrowserWindow({
     show: false,
@@ -196,7 +210,7 @@ async function main() {
   let initialIds = []
   let allTypes = []
 
-  await runCase('画布加载与基础节点渲染', async () => {
+  await runCase('canvas loading and baseline widgets', async () => {
     const snapshot = await inRenderer(widgetSnapshot)
     const canvas = await inRenderer(() => {
       const element = document.querySelector('.design-canvas')
@@ -204,18 +218,359 @@ async function main() {
     })
     assert.equal(canvas.width, 960)
     assert.equal(canvas.height, 720)
-    assert.ok(snapshot.length >= 5, `初始组件数不足：${snapshot.length}`)
-    assert.ok(snapshot.every(item => item.display !== 'none' && item.width > 0 && item.height > 0), '存在不可见或零尺寸节点')
+    assert.ok(snapshot.length >= 5, `鍒濆缁勪欢鏁颁笉瓒筹細${snapshot.length}`)
+    assert.ok(snapshot.every(item => item.display !== 'none' && item.width > 0 && item.height > 0), 'invisible or zero-size widget found')
     initialIds = snapshot.slice(0, 3).map(item => item.id)
-    assert.equal(new Set(snapshot.map(item => item.id)).size, snapshot.length, '组件 ID 不唯一')
+    assert.equal(new Set(snapshot.map(item => item.id)).size, snapshot.length, '缁勪欢 ID 涓嶅敮涓€')
+  })
+
+  await runCase('default AppTopbar is not rendered', async () => {
+    const headers = await inRenderer(() => ({
+      globalTopbar: document.querySelector('.topbar') instanceof HTMLElement,
+      builderToolbar: document.querySelector('.builder-toolbar') instanceof HTMLElement,
+    }))
+    assert.equal(headers.globalTopbar, false, 'the removed global AppTopbar is still rendered in the builder')
+    assert.equal(headers.builderToolbar, true, 'the local Builder toolbar must remain available')
+  })
+  await runCase('custom window titlebar and responsive density', async () => {
+    const initial = await inRenderer(() => {
+      const titlebar = document.querySelector('[data-testid="app-window-titlebar"]')
+      const controls = titlebar?.querySelectorAll('.app-window-controls button')
+      const appShell = document.querySelector('.app-content-shell')
+      const rootStyle = getComputedStyle(document.documentElement)
+      return {
+        titlebar: titlebar instanceof HTMLElement,
+        controls: controls?.length || 0,
+        labels: Array.from(controls || []).map(button => button.getAttribute('aria-label')),
+        dragRegion: titlebar instanceof HTMLElement ? getComputedStyle(titlebar).getPropertyValue('-webkit-app-region') : '',
+        scale: rootStyle.getPropertyValue('--ui-scale').trim(),
+        titlebarHeight: titlebar instanceof HTMLElement ? titlebar.getBoundingClientRect().height : 0,
+        contentHeight: appShell instanceof HTMLElement ? appShell.getBoundingClientRect().height : 0,
+      }
+    })
+    assert.equal(initial.titlebar, true, 'custom Electron titlebar is missing')
+    assert.equal(initial.controls, 3, 'custom titlebar must expose three window controls')
+    assert.deepEqual(initial.labels, ['Minimize window', 'Maximize window', 'Close window'])
+    assert.equal(initial.dragRegion, 'drag', 'titlebar must provide a draggable region')
+    assert.ok(initial.scale, 'responsive UI scale token is missing')
+    assert.ok(initial.titlebarHeight >= 40, 'titlebar is too small for reliable pointer interaction')
+
+    await win.setSize(1240, 780)
+    await sleep(100)
+    const compact = await inRenderer(() => {
+      const titlebar = document.querySelector('[data-testid="app-window-titlebar"]')
+      const content = document.querySelector('.app-content-shell')
+      return {
+        titlebarWidth: titlebar instanceof HTMLElement ? titlebar.getBoundingClientRect().width : 0,
+        contentWidth: content instanceof HTMLElement ? content.getBoundingClientRect().width : 0,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        captionVisible: Boolean(titlebar?.querySelector('.app-window-caption')) && getComputedStyle(titlebar.querySelector('.app-window-caption')).display !== 'none',
+      }
+    })
+    assert.ok(compact.titlebarWidth > 0 && compact.contentWidth > 0, 'responsive layout collapsed at compact width')
+    assert.ok(compact.overflow <= 1, `compact layout overflows horizontally by ${compact.overflow}px`)
+    await win.setSize(1440, 1000)
+    await sleep(100)
+  })
+
+  await runCase('autosave persists final widget content and layout', async () => {
+    const before = await inRenderer(widgetId => {
+      const widget = document.querySelector(`[data-widget-id="${widgetId}"]`)
+      if (!(widget instanceof HTMLElement)) throw new Error('autosave widget target not found')
+      widget.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+      const sections = document.querySelectorAll('.inspector-scroll .property-section')
+      const inputs = sections[1]?.querySelectorAll('input') || []
+      const contentInput = inputs[1]
+      if (!(contentInput instanceof HTMLInputElement)) throw new Error('widget content inspector field not found')
+      return {
+        content: contentInput.value,
+        left: widget.style.left,
+        top: widget.style.top,
+      }
+    }, initialIds[0])
+
+    const nextContent = `Autosave final state ${Date.now()}`
+    await inRenderer(({ widgetId, content }) => {
+      const widget = document.querySelector(`[data-widget-id="${widgetId}"]`)
+      const sections = document.querySelectorAll('.inspector-scroll .property-section')
+      const contentInput = sections[1]?.querySelectorAll('input')[1]
+      if (!(widget instanceof HTMLElement) || !(contentInput instanceof HTMLInputElement)) throw new Error('autosave edit targets not found')
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+      descriptor?.set?.call(contentInput, content)
+      contentInput.dispatchEvent(new Event('input', { bubbles: true }))
+      widget.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true, cancelable: true, button: 0, buttons: 1, pointerId: 8801, clientX: 180, clientY: 120,
+      }))
+      window.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true, cancelable: true, button: 0, buttons: 1, pointerId: 8801, clientX: 218, clientY: 146,
+      }))
+      window.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true, cancelable: true, button: 0, buttons: 0, pointerId: 8801, clientX: 218, clientY: 146,
+      }))
+    }, { widgetId: initialIds[0], content: nextContent })
+
+    const latest = await inRenderer(widgetId => {
+      const widget = document.querySelector(`[data-widget-id="${widgetId}"]`)
+      return widget instanceof HTMLElement ? { left: widget.style.left, top: widget.style.top } : null
+    }, initialIds[0])
+    assert.ok(latest && latest.left !== before.left && latest.top !== before.top, 'layout drag did not update the final widget frame')
+
+    await waitFor(() => inRenderer(({ widgetId, content, frame }) => {
+      const raw = localStorage.getItem('codeless-projects')
+      const projects = raw ? JSON.parse(raw) : []
+      const widget = projects.flatMap(project => project.pages || []).flatMap(page => page.layout?.widgets || [])
+        .find(item => item.id === widgetId)
+      return widget?.config?.content?.text === content
+        && `${widget?.config?.layout?.x}px` === frame.left
+        && `${widget?.config?.layout?.y}px` === frame.top
+    }, { widgetId: initialIds[0], content: nextContent, frame: latest }), 4000, 50)
+  })
+  await runCase('Create Page creates and activates an independent blank page', async () => {
+    await inRenderer(() => {
+      const pagesTab = document.querySelectorAll('.panel-tabs button')[1]
+      if (!(pagesTab instanceof HTMLButtonElement)) throw new Error('Pages palette tab not found')
+      pagesTab.click()
+    })
+    await waitFor(() => inRenderer(() => document.querySelector('.pages-panel') instanceof HTMLElement))
+
+    const before = await inRenderer(() => {
+      const active = document.querySelector('.page-item.active')
+      return {
+        pageCount: document.querySelectorAll('.page-item').length,
+        activePath: active?.querySelector('small')?.textContent?.trim() || '',
+        widgetCount: document.querySelectorAll('.canvas-widget').length,
+      }
+    })
+    assert.ok(before.activePath, 'the initial page path is required to restore the scenario')
+
+    await inRenderer(() => {
+      const createButton = document.querySelector('.page-list-head button')
+      if (!(createButton instanceof HTMLButtonElement)) throw new Error('Create page button not found')
+      createButton.click()
+    })
+    await waitFor(() => inRenderer(() => document.querySelector('.page-create-dialog') instanceof HTMLFormElement))
+
+    const created = {
+      name: `E2E Regression ${Date.now()}`,
+      path: `/e2e-regression-${Date.now()}`,
+    }
+    await inRenderer(({ name, path }) => {
+      const dialog = document.querySelector('.page-create-dialog')
+      const inputs = dialog?.querySelectorAll('input') || []
+      const nameInput = inputs[0]
+      const pathInput = inputs[1]
+      if (!(nameInput instanceof HTMLInputElement) || !(pathInput instanceof HTMLInputElement)) throw new Error('Create page dialog inputs not found')
+      const setValue = (control, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+        descriptor?.set?.call(control, value)
+        control.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      setValue(nameInput, name)
+      setValue(pathInput, path)
+    }, created)
+    await waitFor(() => inRenderer(() => {
+      const submit = document.querySelector('.page-create-dialog button[type="submit"]')
+      return submit instanceof HTMLButtonElement && !submit.disabled
+    }))
+    await inRenderer(() => {
+      const submit = document.querySelector('.page-create-dialog button[type="submit"]')
+      if (!(submit instanceof HTMLButtonElement)) throw new Error('Create page submit button not found')
+      submit.click()
+    })
+    await waitFor(() => inRenderer(() => !document.querySelector('.page-create-dialog')))
+    await waitFor(() => inRenderer(({ name, path, pageCount }) => {
+      const active = document.querySelector('.page-item.active')
+      return document.querySelectorAll('.page-item').length === pageCount + 1
+        && active?.querySelector('strong')?.textContent?.trim() === name
+        && active?.querySelector('small')?.textContent?.trim() === path
+        && document.querySelectorAll('.canvas-widget').length === 0
+    }, { ...created, pageCount: before.pageCount }))
+
+    await inRenderer(activePath => {
+      const page = Array.from(document.querySelectorAll('.page-item')).find(node => node.querySelector('small')?.textContent?.trim() === activePath)
+      if (!(page instanceof HTMLElement)) throw new Error('Original page was not found after page creation')
+      page.click()
+    }, before.activePath)
+    await waitFor(() => inRenderer(widgetCount => document.querySelectorAll('.canvas-widget').length === widgetCount, before.widgetCount))
+    await inRenderer(() => {
+      const componentsTab = document.querySelectorAll('.panel-tabs button')[0]
+      if (!(componentsTab instanceof HTMLButtonElement)) throw new Error('Components palette tab not found')
+      componentsTab.click()
+    })
+  })
+
+  await runCase('Page properties update canvas size, position, and background', async () => {
+    await clearSelection()
+    await waitFor(() => inRenderer(() => document.querySelector('[data-testid="page-properties-panel"]') instanceof HTMLElement))
+
+    const before = await inRenderer(() => {
+      const canvas = document.querySelector('.design-canvas')
+      const panel = document.querySelector('[data-testid="page-properties-panel"]')
+      const fieldValue = label => {
+        const field = Array.from(panel?.querySelectorAll('label') || []).find(node => node.querySelector('span')?.textContent?.trim() === label)
+        const input = field?.querySelector('input:not([type="color"])') || field?.querySelector('input')
+        return input instanceof HTMLInputElement ? input.value : ''
+      }
+      return {
+        name: fieldValue('Page name'),
+        width: fieldValue('Width'),
+        height: fieldValue('Height'),
+        x: fieldValue('Position X'),
+        y: fieldValue('Position Y'),
+        background: fieldValue('Canvas background'),
+      }
+    })
+    assert.ok(before.name && before.width && before.height, 'page property controls did not expose their current values')
+
+    const next = {
+      name: `E2E Page ${Date.now()}`,
+      width: '1001',
+      height: '653',
+      x: '37',
+      y: '-23',
+      background: '#123456',
+    }
+    await inRenderer(values => {
+      const panel = document.querySelector('[data-testid="page-properties-panel"]')
+      if (!panel) throw new Error('Page properties panel not found')
+      const setField = (label, value, color = false) => {
+        const field = Array.from(panel.querySelectorAll('label')).find(node => node.querySelector('span')?.textContent?.trim() === label)
+        const control = field?.querySelector(color ? 'input[type="color"]' : 'input')
+        if (!(control instanceof HTMLInputElement)) throw new Error(`Page property control not found: ${label}`)
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+        descriptor?.set?.call(control, value)
+        control.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      setField('Page name', values.name)
+      setField('Width', values.width)
+      setField('Height', values.height)
+      setField('Position X', values.x)
+      setField('Position Y', values.y)
+      setField('Canvas background', values.background, true)
+    }, next)
+    await waitFor(() => inRenderer(values => {
+      const canvas = document.querySelector('.design-canvas')
+      const headerPageName = document.querySelector('.builder-breadcrumb span')?.textContent?.trim()
+      const colorInput = document.querySelector('[data-testid="page-properties-panel"] input[type="color"]')
+      const expectedRgb = [1, 3, 5].map(offset => Number.parseInt(values.background.slice(offset, offset + 2), 16)).join(',')
+      if (!(canvas instanceof HTMLElement) || !(colorInput instanceof HTMLInputElement)) return false
+      return canvas.style.width === `${values.width}px`
+        && canvas.style.height === `${values.height}px`
+        && canvas.style.transform === `translate(${values.x}px, ${values.y}px)`
+        && colorInput.value.toLowerCase() === values.background
+        && getComputedStyle(canvas).backgroundColor.replace(/\s/g, '') === `rgb(${expectedRgb})`
+        && headerPageName === values.name
+    }, next))
+
+    await inRenderer(values => {
+      const panel = document.querySelector('[data-testid="page-properties-panel"]')
+      if (!panel) throw new Error('Page properties panel not found while restoring state')
+      const setField = (label, value, color = false) => {
+        const field = Array.from(panel.querySelectorAll('label')).find(node => node.querySelector('span')?.textContent?.trim() === label)
+        const control = field?.querySelector(color ? 'input[type="color"]' : 'input')
+        if (!(control instanceof HTMLInputElement)) throw new Error(`Page property control not found while restoring: ${label}`)
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+        descriptor?.set?.call(control, value)
+        control.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      setField('Page name', values.name)
+      setField('Width', values.width)
+      setField('Height', values.height)
+      setField('Position X', values.x)
+      setField('Position Y', values.y)
+      setField('Canvas background', values.background, true)
+    }, { ...before, background: before.background || '#ffffff' })
+    await waitFor(() => inRenderer(values => {
+      const canvas = document.querySelector('.design-canvas')
+      return canvas instanceof HTMLElement
+        && canvas.style.width === `${values.width}px`
+        && canvas.style.height === `${values.height}px`
+        && canvas.style.transform === `translate(${values.x}px, ${values.y}px)`
+    }, before))
+  })
+
+  await runCase('Space plus widget drag pans canvas without moving widget', async () => {
+    await clearSelection()
+    const result = await inRenderer(widgetId => {
+      const widget = document.querySelector(`[data-widget-id="${widgetId}"]`)
+      const canvas = document.querySelector('.design-canvas')
+      const frame = document.querySelector('.canvas-frame')
+      if (!(widget instanceof HTMLElement) || !(canvas instanceof HTMLElement) || !(frame instanceof HTMLElement)) throw new Error('Canvas pan regression targets not found')
+      const before = {
+        left: widget.style.left,
+        top: widget.style.top,
+        width: widget.style.width,
+        height: widget.style.height,
+        frameTransform: frame.style.transform,
+      }
+      const pointerId = 9041
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }))
+      widget.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true, cancelable: true, button: 0, buttons: 1, pointerId, pointerType: 'mouse', isPrimary: true, clientX: 240, clientY: 210,
+      }))
+      widget.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true, cancelable: true, button: 0, buttons: 1, pointerId, pointerType: 'mouse', isPrimary: true, clientX: 302, clientY: 257,
+      }))
+      widget.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true, cancelable: true, button: 0, buttons: 0, pointerId, pointerType: 'mouse', isPrimary: true, clientX: 302, clientY: 257,
+      }))
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', bubbles: true, cancelable: true }))
+      return {
+        before,
+        after: {
+          left: widget.style.left,
+          top: widget.style.top,
+          width: widget.style.width,
+          height: widget.style.height,
+          frameTransform: frame.style.transform,
+        },
+      }
+    }, initialIds[0])
+    assert.deepEqual(
+      { left: result.after.left, top: result.after.top, width: result.after.width, height: result.after.height },
+      { left: result.before.left, top: result.before.top, width: result.before.width, height: result.before.height },
+      'Space+drag changed the widget frame instead of reserving the gesture for canvas panning',
+    )
+    await sleep(50)
+    const frameTransform = await inRenderer(() => {
+      const frame = document.querySelector('.canvas-frame')
+      return frame instanceof HTMLElement ? frame.style.transform : ''
+    })
+    assert.notEqual(frameTransform, result.before.frameTransform, 'Space+drag did not change the canvas viewport transform')
+  })
+  await runCase('structured builder header overflow behavior', async () => {
+    const header = await inRenderer(() => ({
+      context: document.querySelector('.builder-context')?.textContent || '',
+      command: document.querySelector('.command-trigger') instanceof HTMLButtonElement,
+      preview: document.querySelector('.builder-preview-action') instanceof HTMLButtonElement,
+      publish: document.querySelector('.builder-publish-action') instanceof HTMLButtonElement,
+    }))
+    assert.ok(header.context.trim().length > 0, 'builder header context is missing')
+    assert.equal(header.command, true, 'command palette entry is missing from header')
+    assert.equal(header.preview, true, 'preview action is missing from header')
+    assert.equal(header.publish, true, 'publish action is missing from header')
+
+    await openBuilderOverflowMenu()
+    const menu = await inRenderer(() => ({
+      collaboration: document.querySelector('[data-collaboration-toggle]') instanceof HTMLButtonElement,
+      designImport: document.querySelector('[data-design-exchange="import"]') instanceof HTMLButtonElement,
+      designExport: document.querySelector('[data-design-exchange="export"]') instanceof HTMLButtonElement,
+    }))
+    assert.deepEqual(menu, { collaboration: true, designImport: true, designExport: true }, 'overflow menu is missing expected actions')
+    await closeBuilderOverflowMenuWithEscape()
+
+    await openBuilderOverflowMenu()
+    await inRenderer(() => document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })))
+    await waitFor(() => inRenderer(() => !document.querySelector('[data-testid="builder-overflow-menu"]')))
   })
 
   await runCase('local collaboration panel and WebGL layer', async () => {
+    await openBuilderOverflowMenu()
     const toolbarExists = await inRenderer(() => document.querySelector('[data-collaboration-toggle]') instanceof HTMLButtonElement)
     assert.equal(toolbarExists, true, 'missing collaboration toolbar entry')
     await inRenderer(() => {
       const button = document.querySelector('[data-collaboration-toggle]')
-      if (!(button instanceof HTMLButtonElement)) throw new Error('collaboration toolbar entry not found')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
       button.click()
     })
     await waitFor(() => inRenderer(() => Boolean(document.querySelector('[data-collaboration-panel]'))))
@@ -243,10 +598,10 @@ async function main() {
       const card = document.querySelector('.collaboration-session-card')
       const inputs = card ? Array.from(card.querySelectorAll('input')) : []
       return {
-        mode: card?.textContent?.includes('同机协作已开启') ? 'same-device' : 'unknown',
+        mode: card?.textContent?.includes('\u540c\u673a\u534f\u4f5c\u5df2\u5f00\u542f') ? 'same-device' : 'unknown',
         hasSessionId: Boolean(inputs[0]?.value),
         hasToken: Boolean(inputs[1]?.value),
-        hasLanAddress: Boolean(card?.querySelector('input[readonly]') && card?.textContent?.includes('局域网地址')),
+        hasLanAddress: Boolean(card?.querySelector('input[readonly]') && card?.textContent?.includes('灞€鍩熺綉鍦板潃')),
       }
     })
     assert.equal(session.mode, 'same-device', 'created session unexpectedly uses LAN mode')
@@ -266,7 +621,8 @@ async function main() {
     })
     await waitFor(() => inRenderer(() => !document.querySelector('[data-collaboration-panel]')))
   })
-  await runCase('设计交换导入导出入口', async () => {
+  await runCase('design exchange import and export entry points', async () => {
+    await openBuilderOverflowMenu()
     const controls = await inRenderer(() => {
       const importButton = document.querySelector('[data-design-exchange="import"]')
       const exportButton = document.querySelector('[data-design-exchange="export"]')
@@ -277,14 +633,14 @@ async function main() {
         exportDisabled: exportButton instanceof HTMLButtonElement ? exportButton.disabled : true,
       }
     })
-    assert.equal(controls.importExists, true, '缺少设计 JSON 导入入口')
-    assert.equal(controls.exportExists, true, '缺少设计 JSON 导出入口')
-    assert.equal(controls.importDisabled, false, '设计 JSON 导入入口不应被禁用')
-    assert.equal(controls.exportDisabled, false, '设计 JSON 导出入口不应被禁用')
+    assert.equal(controls.importExists, true, '缂哄皯璁捐 JSON 瀵煎叆鍏ュ彛')
+    assert.equal(controls.exportExists, true, '缂哄皯璁捐 JSON 瀵煎嚭鍏ュ彛')
+    assert.equal(controls.importDisabled, false, 'design JSON import must be enabled')
+    assert.equal(controls.exportDisabled, false, 'design JSON export must be enabled')
 
     await inRenderer(() => {
       const button = document.querySelector('[data-design-exchange="import"]')
-      if (!(button instanceof HTMLButtonElement)) throw new Error('设计 JSON 导入按钮不存在')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
       const originalInputClick = HTMLInputElement.prototype.click
       HTMLInputElement.prototype.click = function () {
         window.setTimeout(() => window.dispatchEvent(new Event('focus')), 0)
@@ -296,30 +652,31 @@ async function main() {
       }
     })
     await sleep(450)
+    await openBuilderOverflowMenu()
 
     await inRenderer(() => {
       const button = document.querySelector('[data-design-exchange="export"]')
-      if (!(button instanceof HTMLButtonElement)) throw new Error('设计 JSON 导出按钮不存在')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
       button.click()
     })
     await sleep(80)
     const errors = await inRenderer(() => window.__codelessE2eErrors || [])
-    assert.deepEqual(errors, [], `设计交换入口产生 renderer error：${errors.join('; ')}`)
+    assert.deepEqual(errors, [], `璁捐浜ゆ崲鍏ュ彛浜х敓 renderer error锛?{errors.join('; ')}`)
   })
-  await runCase('组件尺寸、位置、层级与缩放映射', async () => {
+  await runCase('component size position hierarchy and zoom mapping', async () => {
     const data = await inRenderer(() => {
       const canvas = document.querySelector('.design-canvas').getBoundingClientRect()
       const zoom = Number(getComputedStyle(document.querySelector('.design-canvas')).transform.match(/matrix\([^,]+/)?.[0]?.replace('matrix(', '') || '1')
       return { canvasLeft: canvas.left, canvasTop: canvas.top, zoom, widgets: widgetSnapshot() }
     })
-    assert.ok(data.widgets.every(item => item.width >= 24 && item.height >= 24), '组件尺寸未满足最小尺寸约束')
-    assert.ok(data.widgets.every(item => item.left >= 0 && item.top >= 0), '组件位置越界')
-    assert.ok(data.widgets.every(item => item.renderedWidth > 0 && item.renderedHeight > 0), '组件没有实际渲染尺寸')
-    assert.ok(data.widgets.every(item => Number.isFinite(item.zIndex)), '组件层级无效')
-    assert.ok(data.zoom > 0, '画布缩放值无效')
+    assert.ok(data.widgets.every(item => item.width >= 24 && item.height >= 24), 'widget minimum size constraint failed')
+    assert.ok(data.widgets.every(item => item.width >= 24 && item.height >= 24), 'widget minimum size constraint failed')
+    assert.ok(data.widgets.every(item => item.width >= 24 && item.height >= 24), 'widget minimum size constraint failed')
+    assert.ok(data.widgets.every(item => item.width >= 24 && item.height >= 24), 'widget minimum size constraint failed')
+    assert.ok(data.zoom > 0, 'canvas zoom must be positive')
   })
 
-  await runCase('选择反馈与 Shift 多选', async () => {
+  await runCase('selection feedback and shift multi-select', async () => {
     await clickWidget(initialIds[0])
     await sleep(30)
     let selected = await inRenderer(() => Array.from(document.querySelectorAll('.canvas-widget.selected')).map(node => node.dataset.widgetId))
@@ -334,7 +691,7 @@ async function main() {
     assert.equal(await inRenderer(() => document.querySelectorAll('.canvas-widget.selected').length), 0)
   })
 
-  await runCase('画布网格与智能吸附入口', async () => {
+  await runCase('canvas grid and smart snap', async () => {
     const initial = await inRenderer(() => {
       const grid = document.querySelector('[data-testid="canvas-grid-toggle"]')
       const snap = document.querySelector('[data-testid="canvas-snap-toggle"]')
@@ -347,15 +704,15 @@ async function main() {
         opacity: pattern ? getComputedStyle(pattern).opacity : '',
       }
     })
-    assert.equal(initial.gridExists, true, '网格开关不存在')
-    assert.equal(initial.snapExists, true, '智能吸附开关不存在')
-    assert.equal(initial.gridActive, true, '网格默认应开启')
-    assert.equal(initial.snapActive, true, '智能吸附默认应开启')
-    assert.equal(initial.opacity, '1', '网格图层默认不可见')
+    assert.equal(initial.gridExists, true, '缃戞牸寮€鍏充笉瀛樺湪')
+    assert.equal(initial.snapExists, true, '鏅鸿兘鍚搁檮寮€鍏充笉瀛樺湪')
+    assert.equal(initial.gridActive, true, 'grid should be enabled by default')
+    assert.equal(initial.snapActive, true, 'smart snap should be enabled by default')
+    assert.equal(initial.opacity, '1', 'grid layer should be visible by default')
 
     await inRenderer(() => {
       const button = document.querySelector('[data-testid="canvas-grid-toggle"]')
-      if (!(button instanceof HTMLButtonElement)) throw new Error('网格开关不存在')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
       button.click()
     })
     await sleep(30)
@@ -363,61 +720,63 @@ async function main() {
       active: document.querySelector('[data-testid="canvas-grid-toggle"]')?.classList.contains('active') || false,
       opacity: getComputedStyle(document.querySelector('.canvas-grid-pattern')).opacity,
     }))
-    assert.equal(hidden.active, false, '网格关闭后按钮仍为 active')
-    assert.equal(hidden.opacity, '0', '网格关闭后图层 opacity 未变化')
+    assert.equal(hidden.active, false, '缃戞牸鍏抽棴鍚庢寜閽粛涓?active')
+    assert.equal(hidden.opacity, '0', 'grid layer opacity did not change')
 
     await inRenderer(() => {
       const button = document.querySelector('[data-testid="canvas-grid-toggle"]')
-      if (!(button instanceof HTMLButtonElement)) throw new Error('网格开关不存在')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
       button.click()
     })
     await inRenderer(() => {
       const button = document.querySelector('[data-testid="canvas-snap-toggle"]')
-      if (!(button instanceof HTMLButtonElement)) throw new Error('智能吸附开关不存在')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
       button.click()
     })
     await sleep(30)
-    assert.equal(await inRenderer(() => document.querySelector('[data-testid="canvas-snap-toggle"]')?.classList.contains('active') || false), false, '关闭吸附后按钮仍为 active')
+    assert.equal(await inRenderer(() => document.querySelector('[data-testid="canvas-snap-toggle"]')?.classList.contains('active') || false), false, '鍏抽棴鍚搁檮鍚庢寜閽粛涓?active')
     await inRenderer(() => {
       const button = document.querySelector('[data-testid="canvas-snap-toggle"]')
-      if (!(button instanceof HTMLButtonElement)) throw new Error('智能吸附开关不存在')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
       button.click()
     })
   })
 
-  await runCase('多选对齐操作与撤销', async () => {
+  await runCase('multi-select alignment and undo', async () => {
     await clickWidget(initialIds[0])
     await clickWidget(initialIds[1], true)
     await clickWidget(initialIds[2], true)
     await waitFor(() => inRenderer(() => Boolean(document.querySelector('.canvas-selection-toolbar'))))
     const selected = await inRenderer(() => document.querySelectorAll('.canvas-widget.selected').length)
-    assert.equal(selected, 3, `多选组件数量异常：${selected}`)
+    assert.equal(selected, 3, `澶氶€夌粍浠舵暟閲忓紓甯革細${selected}`)
     const before = await inRenderer(ids => ids.map(id => ({
       id,
       left: Number.parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left),
     })), initialIds)
     await inRenderer(() => {
-      const button = document.querySelector('.canvas-selection-toolbar button[title="左对齐"]')
-      if (!(button instanceof HTMLButtonElement)) throw new Error('左对齐按钮不存在')
+      const button = document.querySelector('.canvas-selection-toolbar button[title="Align left"]')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
       button.click()
     })
     await sleep(70)
     const after = await inRenderer(ids => ids.map(id => Number.parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left)), initialIds)
-    assert.equal(new Set(after).size, 1, `左对齐结果不一致：${after.join(', ')}`)
-    assert.ok(new Set(before.map(item => item.left)).size > 1, `测试初始位置未形成可验证差异：${JSON.stringify(before)}`)
+    assert.equal(new Set(after).size, 1, `宸﹀榻愮粨鏋滀笉涓€鑷达細${after.join(', ')}`)
+    assert.ok(new Set(before.map(item => item.left)).size > 1, `娴嬭瘯鍒濆浣嶇疆鏈舰鎴愬彲楠岃瘉宸紓锛?{JSON.stringify(before)}`)
 
     await inRenderer(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })))
     await sleep(70)
     const undone = await inRenderer(ids => ids.map(id => Number.parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left)), initialIds)
-    assert.deepEqual(undone, before.map(item => item.left), `左对齐操作未被撤销：${JSON.stringify({ before, undone })}`)
+    assert.deepEqual(undone, before.map(item => item.left), `宸﹀榻愭搷浣滄湭琚挙閿€锛?{JSON.stringify({ before, undone })}`)
     await clearSelection()
   })
 
-  await runCase('本地 Inspect、代码生成与 SVG 导出入口', async () => {
+  await runCase('local Inspect codegen and SVG export entry points', async () => {
     await clickWidget(initialIds[0])
+    await openBuilderOverflowMenu()
     await inRenderer(() => {
-      const button = Array.from(document.querySelectorAll('.builder-actions button')).find(item => item.textContent?.includes('Inspect'))
-      if (!(button instanceof HTMLButtonElement) || button.disabled) throw new Error('Inspect 按钮不可用')
+      const menu = document.querySelector('[data-testid="builder-overflow-menu"]')
+      const button = Array.from(menu?.querySelectorAll('button') || []).find(item => item.textContent?.includes('Inspect'))
+      if (!(button instanceof HTMLButtonElement) || button.disabled) throw new Error('Inspect button unavailable')
       button.click()
     })
     await waitFor(() => inRenderer(() => Boolean(document.querySelector('[data-testid="inspect-panel"]'))))
@@ -431,13 +790,13 @@ async function main() {
     assert.equal(panel.hasFormats, 4)
     await inRenderer(() => {
       const button = document.querySelector('[data-testid="inspect-panel"] .inspect-panel-header button')
-      if (!(button instanceof HTMLButtonElement)) throw new Error('Inspect 关闭按钮缺失')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
       button.click()
     })
     await waitFor(() => inRenderer(() => !document.querySelector('[data-testid="inspect-panel"]')))
   })
 
-  await runCase('画布框选', async () => {
+  await runCase('canvas marquee selection', async () => {
     const rect = await inRenderer(() => document.querySelector('.design-canvas').getBoundingClientRect().toJSON())
     const startX = rect.left + 8
     const startY = rect.top + 8
@@ -449,29 +808,29 @@ async function main() {
     await inRenderer((x, y) => window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, buttons: 0, isPrimary: true, pointerId: 7, clientX: x, clientY: y })), rect.left + 420, rect.top + 190)
     await sleep(50)
     const selected = await inRenderer(() => document.querySelectorAll('.canvas-widget.selected').length)
-    assert.ok(selected >= 1, `框选未命中组件，selected=${selected}`)
-    assert.equal(await inRenderer(() => Boolean(document.querySelector('.canvas-selection-box'))), false, '框选框未清理')
+    assert.ok(selected >= 1, `妗嗛€夋湭鍛戒腑缁勪欢锛宻elected=${selected}`)
+    assert.equal(await inRenderer(() => Boolean(document.querySelector('.canvas-selection-box'))), false, 'marquee selection box was not cleared')
     await clearSelection()
   })
 
-  await runCase('组件面板覆盖所有组件类型', async () => {
+  await runCase('component panel coverage', async () => {
     allTypes = await inRenderer(() => Array.from(document.querySelectorAll('.component-grid button')).map(node => node.dataset.widgetType).filter(Boolean))
-    assert.ok(allTypes.length >= 20, `组件面板类型数量异常：${allTypes.length}`)
+    assert.ok(allTypes.length >= 20, `缁勪欢闈㈡澘绫诲瀷鏁伴噺寮傚父锛?{allTypes.length}`)
     for (const type of allTypes) {
       await inRenderer(typeValue => {
         const button = Array.from(document.querySelectorAll('.component-grid button')).find(node => node.dataset.widgetType === typeValue)
-        if (!button) throw new Error(`组件面板缺少 ${typeValue}`)
+        if (!button) throw new Error(`缁勪欢闈㈡澘缂哄皯 ${typeValue}`)
         button.click()
       }, type)
     }
     await sleep(120)
     const renderedTypes = await inRenderer(() => Array.from(new Set(Array.from(document.querySelectorAll('.canvas-widget')).map(node => node.dataset.widgetType))))
-    assert.ok(allTypes.every(type => renderedTypes.includes(type)), `未渲染类型：${allTypes.filter(type => !renderedTypes.includes(type)).join(',')}`)
+    assert.ok(allTypes.every(type => renderedTypes.includes(type)), `鏈覆鏌撶被鍨嬶細${allTypes.filter(type => !renderedTypes.includes(type)).join(',')}`)
     const ids = await inRenderer(() => Array.from(document.querySelectorAll('.canvas-widget')).map(node => node.dataset.widgetId))
-    assert.equal(new Set(ids).size, ids.length, '批量添加后组件 ID 重复')
+    assert.equal(new Set(ids).size, ids.length, '鎵归噺娣诲姞鍚庣粍浠?ID 閲嶅')
   })
 
-  await runCase('Element Plus 组件实际渲染节点与视觉属性', async () => {
+  await runCase('Element Plus component rendering', async () => {
     const expected = {
       badge: '.render-badge', tag: '.render-tag', alert: '.render-alert', progress: '.render-progress',
       switch: '.render-switch', checkbox: '.render-choice input[type="checkbox"]', radio: '.render-choice input[type="radio"]',
@@ -499,36 +858,36 @@ async function main() {
       }
     }), expected)
     for (const item of checks) {
-      assert.equal(item.exists, true, `缺少 ${item.type} 画布节点`)
-      assert.equal(item.rendered, true, `${item.type} 内部渲染节点缺失`)
-      assert.ok(item.width > 0 && item.height > 0, `${item.type} 渲染尺寸无效：${item.width}x${item.height}`)
+      assert.equal(item.exists, true, `缂哄皯 ${item.type} 鐢诲竷鑺傜偣`)
+      assert.equal(item.rendered, true, `${item.type} 鍐呴儴娓叉煋鑺傜偣缂哄け`)
+      assert.ok(item.width > 0 && item.height > 0, `${item.type} 娓叉煋灏哄鏃犳晥锛?{item.width}x${item.height}`)
     }
     const progress = checks.find(item => item.type === 'progress')
-    assert.equal(progress?.progressWidth, '68%', '进度条默认百分比未映射到轨道宽度')
-    assert.equal(checks.find(item => item.type === 'switch')?.switchPressed, 'true', '开关默认状态未渲染')
-    assert.ok((checks.find(item => item.type === 'checkbox')?.checkboxCount || 0) >= 1, '复选框输入项缺失')
-    assert.ok((checks.find(item => item.type === 'radio')?.radioCount || 0) >= 2, '单选框选项缺失')
-    assert.ok((checks.find(item => item.type === 'pagination')?.paginationButtons || 0) >= 3, '分页按钮缺失')
-    assert.equal(checks.find(item => item.type === 'tabs')?.activeTabs, 1, '标签页没有唯一激活项')
-    assert.equal(checks.find(item => item.type === 'collapse')?.collapseExpanded, 'true', '折叠面板默认展开状态错误')
-    assert.equal(checks.find(item => item.type === 'collapse')?.collapsePanelDisplay, 'block', '折叠面板内容未显示')
-    assert.equal(checks.find(item => item.type === 'tooltip')?.tooltipOpacity, '1', '设计态 Tooltip 提示气泡未显示')
+    assert.equal(progress?.progressWidth, '68%', '杩涘害鏉￠粯璁ょ櫨鍒嗘瘮鏈槧灏勫埌杞ㄩ亾瀹藉害')
+    assert.equal(checks.find(item => item.type === 'switch')?.switchPressed, 'true', '寮€鍏抽粯璁ょ姸鎬佹湭娓叉煋')
+    assert.ok((checks.find(item => item.type === 'checkbox')?.checkboxCount || 0) >= 1, 'checkbox input is missing')
+    assert.ok((checks.find(item => item.type === 'radio')?.radioCount || 0) >= 2, '鍗曢€夋閫夐」缂哄け')
+    assert.ok((checks.find(item => item.type === 'pagination')?.paginationButtons || 0) >= 3, '鍒嗛〉鎸夐挳缂哄け')
+    assert.equal(checks.find(item => item.type === 'tabs')?.activeTabs, 1, '鏍囩椤垫病鏈夊敮涓€婵€娲婚」')
+    assert.equal(checks.find(item => item.type === 'collapse')?.collapseExpanded, 'true', 'collapse panel should be expanded')
+    assert.equal(checks.find(item => item.type === 'collapse')?.collapsePanelDisplay, 'block', 'collapse panel content is not visible')
+    assert.equal(checks.find(item => item.type === 'tooltip')?.tooltipOpacity, '1', 'tooltip did not become visible')
   })
 
-  await runCase('运行态 Preview 组件交互与服务组件', async () => {
+  await runCase('runtime preview interactions', async () => {
     const tagId = await widgetIdByType('tag')
     const alertId = await widgetIdByType('alert')
     const checkboxId = await widgetIdByType('checkbox')
     const modalId = await widgetIdByType('modal')
     const drawerId = await widgetIdByType('drawer')
     const loadingId = await widgetIdByType('loading')
-    assert.ok(tagId && alertId && checkboxId && modalId && drawerId && loadingId, '运行态测试组件未创建')
-    await setInspectorField(tagId, '可关闭', true)
-    await setInspectorField(alertId, '可关闭', true)
-    await setInspectorField(checkboxId, '多选项', '选项一|option-1\n选项二|option-2')
-    await setInspectorField(modalId, '默认显示', true)
-    await setInspectorField(drawerId, '默认显示', true)
-    await setInspectorField(loadingId, '默认显示', true)
+    assert.ok(tagId && alertId && checkboxId && modalId && drawerId && loadingId, '杩愯鎬佹祴璇曠粍浠舵湭鍒涘缓')
+    await setInspectorField(tagId, '\u53ef\u5173\u95ed', true)
+    await setInspectorField(alertId, '\u53ef\u5173\u95ed', true)
+    await setInspectorField(checkboxId, '\u591a\u9009\u9879', '\u9009\u9879\u4e00|option-1\n\u9009\u9879\u4e8c|option-2')
+    await setInspectorField(modalId, '\u9ed8\u8ba4\u663e\u793a', true)
+    await setInspectorField(drawerId, '\u9ed8\u8ba4\u663e\u793a', true)
+    await setInspectorField(loadingId, '\u9ed8\u8ba4\u663e\u793a', true)
 
     await openPreview()
     const runtime = await inRenderer(() => ({
@@ -537,64 +896,64 @@ async function main() {
       dateType: document.querySelector('.runtime-widget-node.widget-datePicker input')?.type,
       serviceNodes: document.querySelectorAll('.runtime-widget-node.widget-modal, .runtime-widget-node.widget-drawer, .runtime-widget-node.widget-loading').length,
     }))
-    assert.ok(runtime.count >= allTypes.length, `运行态节点数量不足：${runtime.count}`)
-    assert.ok(allTypes.every(type => runtime.types.includes(type)), `运行态缺少组件：${allTypes.filter(type => !runtime.types.includes(type)).join(',')}`)
-    assert.equal(runtime.dateType, 'date', '日期选择器没有使用 date input')
-    assert.equal(runtime.serviceNodes, 3, '运行态服务组件数量错误')
+    assert.ok(runtime.count >= allTypes.length, `杩愯鎬佽妭鐐规暟閲忎笉瓒筹細${runtime.count}`)
+    assert.ok(allTypes.every(type => runtime.types.includes(type)), `杩愯鎬佺己灏戠粍浠讹細${allTypes.filter(type => !runtime.types.includes(type)).join(',')}`)
+    assert.equal(runtime.dateType, 'date', '鏃ユ湡閫夋嫨鍣ㄦ病鏈変娇鐢?date input')
+    assert.equal(runtime.serviceNodes, 3, 'runtime service node count is incorrect')
 
     const switchBefore = await inRenderer(() => document.querySelector('.runtime-widget-node.widget-switch .render-switch')?.getAttribute('aria-pressed'))
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-switch .render-switch')?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     await sleep(40)
     const switchAfter = await inRenderer(() => document.querySelector('.runtime-widget-node.widget-switch .render-switch')?.getAttribute('aria-pressed'))
     assert.equal(switchBefore, 'true')
-    assert.equal(switchAfter, 'false', '运行态开关点击没有切换状态')
+    assert.equal(switchAfter, 'false', 'runtime switch did not toggle')
 
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-checkbox input[type="checkbox"]')?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => document.querySelector('.runtime-widget-node.widget-checkbox input[type="checkbox"]')?.checked), true, '运行态复选框点击没有选中')
+    assert.equal(await inRenderer(() => document.querySelector('.runtime-widget-node.widget-checkbox input[type="checkbox"]')?.checked), true, '杩愯鎬佸閫夋鐐瑰嚮娌℃湁閫変腑')
 
     const radioInputs = await inRenderer(() => Array.from(document.querySelectorAll('.runtime-widget-node.widget-radio input[type="radio"]')).map(node => node.value))
-    assert.ok(radioInputs.length >= 2, '运行态单选框选项不足')
+    assert.ok(radioInputs.length >= 2, '杩愯鎬佸崟閫夋閫夐」涓嶈冻')
     await inRenderer(() => document.querySelectorAll('.runtime-widget-node.widget-radio input[type="radio"]')[1]?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => Array.from(document.querySelectorAll('.runtime-widget-node.widget-radio input[type="radio"]')).filter(node => node.checked).length), 1, '运行态单选框选中数量异常')
+    assert.equal(await inRenderer(() => Array.from(document.querySelectorAll('.runtime-widget-node.widget-radio input[type="radio"]')).filter(node => node.checked).length), 1, '杩愯鎬佸崟閫夋閫変腑鏁伴噺寮傚父')
 
     await inRenderer(() => Array.from(document.querySelectorAll('.runtime-widget-node.widget-pagination .render-pagination button')).find(node => node.textContent?.trim() === '2')?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => document.querySelector('.runtime-widget-node.widget-pagination .render-pagination button.active')?.textContent?.trim()), '2', '运行态分页切换失败')
+    assert.equal(await inRenderer(() => document.querySelector('.runtime-widget-node.widget-pagination .render-pagination button.active')?.textContent?.trim()), '2', 'runtime pagination did not switch')
 
     await inRenderer(() => document.querySelectorAll('.runtime-widget-node.widget-tabs .render-tabs-head button')[1]?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => document.querySelectorAll('.runtime-widget-node.widget-tabs .render-tabs-head button.active')[0]?.textContent?.trim()), '详情', '运行态标签页切换失败')
+    assert.equal(await inRenderer(() => document.querySelectorAll('.runtime-widget-node.widget-tabs .render-tabs-head button.active')[0]?.textContent?.trim()), '\u8be6\u60c5', '杩愯鎬佹爣绛鹃〉鍒囨崲澶辫触')
 
     const collapseBefore = await inRenderer(() => document.querySelector('.runtime-widget-node.widget-collapse .render-collapse-head')?.getAttribute('aria-expanded'))
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-collapse .render-collapse-head')?.click())
     await sleep(40)
     const collapseAfter = await inRenderer(() => document.querySelector('.runtime-widget-node.widget-collapse .render-collapse-head')?.getAttribute('aria-expanded'))
     assert.equal(collapseBefore, 'true')
-    assert.equal(collapseAfter, 'false', '运行态折叠面板没有收起')
+    assert.equal(collapseAfter, 'false', 'runtime collapse did not close')
     assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-collapse .render-collapse-panel')).display), 'none')
 
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-tag .render-tag button')?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-tag .render-tag')).display), 'none', 'Tag 关闭后仍然可见')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-tag .render-tag')).display), 'none', 'Tag remained visible after closing')
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-alert .render-alert button')?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-alert .render-alert')).display), 'none', 'Alert 关闭后仍然可见')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-alert .render-alert')).display), 'none', 'Alert remained visible after closing')
 
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-modal .render-modal')).display), 'flex', 'Modal 默认显示失败')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-modal .render-modal')).display), 'flex', 'Modal 榛樿鏄剧ず澶辫触')
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-modal .service-close')?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-modal .render-modal')).display), 'none', 'Modal 关闭按钮没有隐藏弹窗')
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-drawer .render-drawer')).display), 'block', 'Drawer 默认显示失败')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-modal .render-modal')).display), 'none', 'Modal 鍏抽棴鎸夐挳娌℃湁闅愯棌寮圭獥')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-drawer .render-drawer')).display), 'block', 'Drawer 榛樿鏄剧ず澶辫触')
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-drawer .service-close')?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-drawer .render-drawer')).display), 'none', 'Drawer 关闭按钮没有隐藏抽屉')
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-loading .render-loading')).display), 'flex', 'Loading 状态未显示')
-    assert.ok(await inRenderer(() => Boolean(document.querySelector('.runtime-widget-node.widget-loading .loading-spinner'))), 'Loading spinner 未渲染')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-drawer .render-drawer')).display), 'none', 'Drawer 鍏抽棴鎸夐挳娌℃湁闅愯棌鎶藉眽')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-loading .render-loading')).display), 'flex', 'Loading 鐘舵€佹湭鏄剧ず')
+    assert.ok(await inRenderer(() => Boolean(document.querySelector('.runtime-widget-node.widget-loading .loading-spinner'))), 'loading spinner is missing')
     await closePreview()
   })
-  await runCase('右键菜单弹出、边界翻转与动画规则', async () => {
+  await runCase('context menu boundary scrolling and animation rules', async () => {
     await rightClickWidget(initialIds[0], 1435, 995)
     await sleep(50)
     const menu = await inRenderer(() => {
@@ -606,14 +965,14 @@ async function main() {
       return { exists: Boolean(element), left: rect?.left, top: rect?.top, right: rect?.right, bottom: rect?.bottom, animated: rules.includes('.context-menu-enter-active') }
     })
     assert.equal(menu.exists, true)
-    assert.ok(menu.left >= 0 && menu.top >= 0 && menu.right <= 1440 && menu.bottom <= 1000, `菜单越界：${JSON.stringify(menu)}`)
-    assert.equal(menu.animated, true, '未发现菜单进入/离开动画规则')
+    assert.ok(menu.left >= 0 && menu.top >= 0 && menu.right <= 1440 && menu.bottom <= 1000, `鑿滃崟瓒婄晫锛?{JSON.stringify(menu)}`)
+    assert.equal(menu.animated, true, '鏈彂鐜拌彍鍗曡繘鍏?绂诲紑鍔ㄧ敾瑙勫垯')
     await inRenderer(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) )
     await waitForMenuClosed()
     assert.equal(await inRenderer(() => Boolean(document.querySelector('.canvas-context-menu'))), false)
   })
 
-  await runCase('复制、粘贴、删除与唯一 ID', async () => {
+  await runCase('copy paste delete and unique ids', async () => {
     await clickWidget(initialIds[0])
     await rightClickWidget(initialIds[0], 260, 220)
     await sleep(30)
@@ -639,7 +998,7 @@ async function main() {
     assert.equal(await inRenderer(() => document.querySelectorAll('.canvas-widget').length), before)
   })
 
-  await runCase('剪切后粘贴恢复', async () => {
+  await runCase('cut and paste restores widget', async () => {
     const targetId = initialIds[1]
     await clickWidget(targetId)
     await rightClickWidget(targetId, 280, 240)
@@ -655,15 +1014,15 @@ async function main() {
     assert.equal(await inRenderer(() => document.querySelectorAll('.canvas-widget').length), before)
   })
 
-  await runCase('重命名、锁定/解锁、隐藏/显示', async () => {
+  await runCase('rename lock visibility and unlock behavior', async () => {
     const targetId = initialIds[0]
     await clickWidget(targetId)
-    await inRenderer(() => { window.prompt = () => 'E2E重命名' })
+    await inRenderer(() => { window.prompt = () => 'E2E renamed' })
     await rightClickWidget(targetId, 280, 240)
     await sleep(20)
     await clickMenu('rename')
     await sleep(50)
-    assert.ok(await inRenderer(id => document.querySelector(`[data-widget-id="${id}"] .widget-label`)?.textContent?.includes('E2E重命名'), targetId))
+    assert.ok(await inRenderer(id => document.querySelector(`[data-widget-id="${id}"] .widget-label`)?.textContent?.includes('E2E renamed'), targetId))
 
     await rightClickWidget(targetId, 280, 240)
     await sleep(20)
@@ -680,7 +1039,7 @@ async function main() {
     assert.equal(await inRenderer(id => document.querySelector(`[data-widget-id="${id}"]`)?.classList.contains('selected'), targetId), true)
     await rightClickWidget(targetId, 280, 240)
     await sleep(20)
-    assert.ok(await inRenderer(() => document.querySelector('[data-menu-command="lock"]')?.textContent?.includes('解锁')))
+    assert.ok(await inRenderer(() => document.querySelector('[data-menu-command="lock"]')?.textContent?.includes('\u89e3\u9501')))
     await clickMenu('lock')
     await sleep(50)
     assert.equal(await inRenderer(id => document.querySelector(`[data-widget-id="${id}"]`)?.classList.contains('locked'), targetId), false)
@@ -698,7 +1057,7 @@ async function main() {
     assert.equal(await inRenderer(id => document.querySelector(`[data-widget-id="${id}"]`)?.classList.contains('hidden'), targetId), false)
   })
 
-  await runCase('层级调整与撤销/重做', async () => {
+  await runCase('layer ordering and undo redo', async () => {
     const targetId = initialIds[0]
     await clickWidget(targetId)
     const before = await inRenderer(id => Number.parseInt(document.querySelector(`[data-widget-id="${id}"]`).style.zIndex, 10), targetId)
@@ -735,7 +1094,7 @@ async function main() {
     assert.notEqual(await inRenderer(id => document.querySelector(`[data-widget-id="${id}"]`).classList.contains('hidden'), targetId), hiddenBeforeUndo)
   })
 
-  await runCase('容器粘贴目标与子节点渲染', async () => {
+  await runCase('container paste target and child rendering', async () => {
     let containerInfo = await inRenderer(() => {
       const nodes = Array.from(document.querySelectorAll('.canvas-widget'))
       const node = nodes.find(item => ['card', 'frame', 'modal', 'stack', 'grid', 'drawer', 'loading'].includes(item.dataset.widgetType || ''))
@@ -744,7 +1103,7 @@ async function main() {
     if (!containerInfo.id) {
       await inRenderer(() => {
         const button = document.querySelector('.component-grid button[data-widget-type="card"]')
-        if (!(button instanceof HTMLButtonElement)) throw new Error('找不到卡片容器组件入口')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
         button.click()
       })
       await sleep(80)
@@ -755,7 +1114,7 @@ async function main() {
       })
     }
     const containerId = containerInfo.id
-    assert.ok(containerId, `未找到可粘贴的容器：${containerInfo.types.join(',')}`)
+    assert.ok(containerId, `鏈壘鍒板彲绮樿创鐨勫鍣細${containerInfo.types.join(',')}`)
     await clickWidget(initialIds[2])
     await rightClickWidget(initialIds[2], 320, 270)
     await sleep(20)
@@ -770,14 +1129,14 @@ async function main() {
     assert.equal(afterChildren, beforeChildren + 1)
   })
 
-  await runCase('键盘移动、尺寸调整与菜单退出', async () => {
+  await runCase('keyboard movement and menu exit', async () => {
     const targetId = initialIds[2]
     await clickWidget(targetId)
     const leftBefore = await inRenderer(id => parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left), targetId)
     await inRenderer(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })))
     await sleep(50)
     const leftAfter = await inRenderer(id => parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left), targetId)
-    assert.ok(leftAfter > leftBefore, `键盘移动未生效：${leftBefore} -> ${leftAfter}`)
+    assert.ok(leftAfter > leftBefore, `閿洏绉诲姩鏈敓鏁堬細${leftBefore} -> ${leftAfter}`)
 
     const widthBefore = await inRenderer(id => parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.width), targetId)
     await inRenderer(id => {
@@ -789,7 +1148,7 @@ async function main() {
     }, targetId)
     await sleep(80)
     const widthAfter = await inRenderer(id => parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.width), targetId)
-    assert.ok(widthAfter >= widthBefore, `尺寸调整未生效：${widthBefore} -> ${widthAfter}`)
+    assert.ok(widthAfter >= widthBefore, `灏哄璋冩暣鏈敓鏁堬細${widthBefore} -> ${widthAfter}`)
 
     await rightClickWidget(targetId, 400, 300)
     await sleep(20)
@@ -872,14 +1231,69 @@ async function main() {
     assert.ok(fitted.height <= fitted.stageHeight + 2, `fit page height exceeds viewport: ${JSON.stringify(fitted)}`)
   })
 
+
+  await runCase('local review panel creates snapshots and comments', async () => {
+    await openBuilderOverflowMenu()
+    await inRenderer(() => {
+      const menu = document.querySelector('[data-testid="builder-overflow-menu"]')
+      const reviewButton = Array.from(menu?.querySelectorAll('button') || []).find(button => button.textContent?.trim() === 'Review')
+      if (!(reviewButton instanceof HTMLButtonElement)) throw new Error('Review toolbar button not found')
+      reviewButton.click()
+    })
+    await waitFor(() => inRenderer(() => Boolean(document.querySelector('[data-testid="review-panel"]'))))
+    const before = await inRenderer(() => ({
+      snapshots: document.querySelectorAll('.review-snapshot').length,
+      comments: document.querySelectorAll('.review-comment').length,
+      activity: document.querySelectorAll('.review-activity-list li').length,
+    }))
+    await inRenderer(() => {
+      const input = document.querySelector('.review-create-row input')
+      const button = document.querySelector('.review-create-row button')
+      if (!(input instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) throw new Error('Review snapshot controls not found')
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+      descriptor?.set?.call(input, 'E2E review snapshot')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      button.click()
+    })
+    await waitFor(() => inRenderer(count => document.querySelectorAll('.review-snapshot').length > count, before.snapshots))
+    await inRenderer(() => {
+      const textarea = document.querySelector('.review-section textarea')
+      const button = document.querySelector('.review-comment-actions button')
+      if (!(textarea instanceof HTMLTextAreaElement) || !(button instanceof HTMLButtonElement)) throw new Error('Review comment controls not found')
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+      descriptor?.set?.call(textarea, 'E2E review comment')
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await waitFor(() => inRenderer(() => {
+      const button = document.querySelector('.review-comment-actions button')
+      return button instanceof HTMLButtonElement && !button.disabled
+    }))
+    await inRenderer(() => {
+      const button = document.querySelector('.review-comment-actions button')
+      if (!(button instanceof HTMLButtonElement) || button.disabled) throw new Error('Review comment action is unavailable')
+      button.click()
+    })
+    await waitFor(() => inRenderer(count => document.querySelectorAll('.review-comment').length > count, before.comments))
+    const after = await inRenderer(() => ({
+      filters: document.querySelectorAll('.review-filter-grid select').length,
+      comment: Array.from(document.querySelectorAll('.review-comment p')).some(node => node.textContent === 'E2E review comment'),
+      activity: document.querySelectorAll('.review-activity-list li').length,
+    }))
+    assert.equal(after.filters, 3, 'review diff must expose page, node, and property filters')
+    assert.equal(after.comment, true, 'local review comment was not rendered')
+    assert.ok(after.activity >= before.activity, 'review actions must be traceable in the panel')
+    await inRenderer(() => document.querySelector('.review-panel-header .icon-button')?.click())
+    await waitFor(() => inRenderer(() => !document.querySelector('[data-testid="review-panel"]')))
+  })
+
   const browserErrors = await inRenderer(() => window.__codelessE2eErrors || [])
   if (browserErrors.length) rendererErrors.push(...browserErrors.map(error => `browser:${error}`))
 
   const failed = results.filter(item => item.status === 'failed')
-  console.log('\nE2E 结果：')
-  for (const result of results) console.log(`${result.status === 'passed' ? '通过' : '失败'} | ${result.name}${result.error ? ` | ${result.error}` : ''}`)
+  console.log('\nE2E results:')
+  for (const result of results) console.log(`${result.status === 'passed' ? 'PASS' : 'FAIL'} | ${result.name}${result.error ? ` | ${result.error}` : ''}`)
   if (rendererErrors.length) {
-    console.error('\n渲染器错误：')
+    console.error('\n娓叉煋鍣ㄩ敊璇細')
     rendererErrors.forEach(error => console.error(error))
   }
   if (failed.length || rendererErrors.length) process.exitCode = 1

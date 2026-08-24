@@ -99,31 +99,42 @@ export function useLowcode() {
     pruneProjectHistory()
   }
 
-  function selectPage(pageId: string) {
+  async function selectPage(pageId: string) {
     const project = currentProject.value
     if (!project) return false
     syncProjectPages(project)
+    if (!project.pages?.some(page => page.id === pageId)) return false
+    if (project.currentPageId === pageId) return true
+
+    // Switching pages must never discard the final edit that is still inside the
+    // autosave debounce window. The manager resolves only after the latest live
+    // snapshot has reached persistence.
+    await designer.flushAutoSave()
+    if (currentProject.value !== project) return false
     if (!activateProjectPage(project, pageId)) return false
+
     designer.resetDesigner()
     runtime.resetRuntimeValues()
     return true
   }
 
-  function createPage() {
+  function createPage(input: { name: string; path: string }) {
     const project = currentProject.value
     if (!project) return false
-    const name = window.prompt('请输入页面名称', '新页面')?.trim()
+    const name = input.name.trim()
     if (!name) return false
-    const suggestedPath = `/${name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-').replace(/^-|-$/g, '') || 'page'}`
-    let path = window.prompt('请输入页面路径', suggestedPath)?.trim() || suggestedPath
-    if (!path.startsWith('/')) path = `/${path}`
+    const pathValue = input.path.trim() || name
+    const path = (pathValue.startsWith('/') ? pathValue : `/${pathValue}`).replace(/\/+/g, '/')
     const usedPaths = new Set((project.pages || []).map(page => page.path))
-    if (usedPaths.has(path)) path = `${path}-${Date.now().toString().slice(-4)}`
+    if (usedPaths.has(path)) {
+      notify('A page already uses this path.', 'danger')
+      return false
+    }
     const sourceLayout = project.layout
     const layout: PageLayout = {
       version: sourceLayout.version,
       pageName: name,
-      canvas: { ...sourceLayout.canvas },
+      canvas: { ...sourceLayout.canvas, x: 0, y: 0 },
       widgets: [],
     }
     const page: LowCodePage = { id: makeId('page'), name, path, layout, guards: [] }
@@ -133,7 +144,7 @@ export function useLowcode() {
     designer.resetDesigner({ preserveProjectHistory: true })
     runtime.resetRuntimeValues()
     designer.markDirty()
-    notify(`已创建页面“${name}”`)
+    notify(`Created page "${name}".`)
     return true
   }
 
@@ -206,6 +217,48 @@ export function useLowcode() {
     runtime.resetRuntimeValues()
     designer.markDirty()
     notify(`页面“${page.name}”已删除`, 'info')
+    return true
+  }
+
+  function updateCurrentPageProperties(patch: {
+    name?: string
+    canvas?: Partial<PageLayout['canvas']>
+  }) {
+    const project = currentProject.value
+    const page = currentPage.value
+    if (!project || !page) return false
+    const nextName = patch.name?.trim()
+    const canvasPatch = patch.canvas || {}
+    const hasNameChange = nextName !== undefined && nextName !== '' && nextName !== page.name
+    const numberInRange = (value: unknown, fallback: number, min: number, max: number) => {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? Math.round(Math.max(min, Math.min(max, parsed))) : fallback
+    }
+    const background = typeof canvasPatch.background === 'string' && /^#[0-9a-f]{6}$/i.test(canvasPatch.background.trim())
+      ? canvasPatch.background.trim()
+      : page.layout.canvas.background
+    const nextCanvas = {
+      ...page.layout.canvas,
+      width: numberInRange(canvasPatch.width, page.layout.canvas.width, 160, 10000),
+      height: numberInRange(canvasPatch.height, page.layout.canvas.height, 160, 10000),
+      x: numberInRange(canvasPatch.x, page.layout.canvas.x || 0, -100000, 100000),
+      y: numberInRange(canvasPatch.y, page.layout.canvas.y || 0, -100000, 100000),
+      background,
+    }
+    const canvasChanged = Object.entries(nextCanvas).some(([key, value]) => page.layout.canvas[key as keyof PageLayout['canvas']] !== value)
+    if (!hasNameChange && !canvasChanged) return false
+
+    beginProjectHistory()
+    if (hasNameChange && nextName) {
+      page.name = nextName
+      page.layout.pageName = nextName
+      const route = project.routes?.find(item => item.pageId === page.id)
+      if (route) route.title = nextName
+    }
+    Object.assign(page.layout.canvas, nextCanvas)
+    if (project.currentPageId === page.id) project.layout = page.layout
+    commitProjectHistory()
+    designer.markDirty()
     return true
   }
 
@@ -398,6 +451,7 @@ export function useLowcode() {
     currentProjectId,
     currentProject,
     dirty: designer.dirty,
+    dirtyRevision: designer.dirtyRevision,
     selectedWidgetId: designer.selectedWidgetId,
     notify,
     loadTables: dataModel.loadTables,
@@ -474,7 +528,7 @@ export function useLowcode() {
     loading, projects, activities, databasePath, activeArea, currentProjectId, currentProject, pages, currentPage, pageTitle,
     appModule, appRoute: shellRouter.currentRoute, isHome: shellRouter.isHome, isWorkspace: shellRouter.isWorkspace,
     publishedCount, totalWidgets, showPreview, showInspectPanel, toast, navigate, notify, toggleInspectPanel, importAsset,
-    selectPage, createPage, duplicatePage, renamePage, deletePage, updatePagePath, setEntryPage, addPageGuard, updatePageGuard, removePageGuard,
+    selectPage, createPage, duplicatePage, renamePage, deletePage, updateCurrentPageProperties, updatePagePath, setEntryPage, addPageGuard, updatePageGuard, removePageGuard,
     exportDesignExchange, importDesignExchange,
     ...collaboration,
     ...designer,

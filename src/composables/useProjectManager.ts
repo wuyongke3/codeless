@@ -13,6 +13,7 @@ interface ProjectManagerOptions {
   currentProjectId: Ref<string>
   currentProject: ComputedRef<LowCodeProject | undefined>
   dirty: Ref<boolean>
+  dirtyRevision: Ref<number>
   selectedWidgetId: Ref<string>
   notify: (message: string, tone?: 'success' | 'info' | 'danger') => void
   loadTables: () => Promise<void>
@@ -24,9 +25,20 @@ interface ProjectManagerOptions {
 export function useProjectManager(options: ProjectManagerOptions) {
   const {
     loading, projects, activities, databasePath, activeArea, currentProjectId, currentProject,
-    dirty, selectedWidgetId, notify, loadTables, resetDesigner, publishCollaborationProject, navigateToArea,
+    dirty, dirtyRevision, selectedWidgetId, notify, loadTables, resetDesigner, publishCollaborationProject, navigateToArea,
   } = options
   const saving = ref(false)
+  interface SaveRequest {
+    snapshot: LowCodeProject
+    message: string
+    resolve: () => void
+  }
+
+  // At most one request for each project waits in the queue. New edits replace
+  // that request's immutable snapshot and all callers resolve after its latest
+  // snapshot has been persisted.
+  const pendingSaves = new Map<string, SaveRequest>()
+  let saveDrain: Promise<void> | null = null
   const showCreateModal = ref(false)
   const showDeleteConfirm = ref(false)
   const createForm = reactive({ name: '', description: '', category: '业务应用', template: 'dashboard' as 'dashboard' | 'form' | 'blank' })
@@ -65,26 +77,118 @@ export function useProjectManager(options: ProjectManagerOptions) {
     return true
   }
 
-  async function saveProject(message = '页面已保存到本地 SQLite') {
-    if (!currentProject.value || saving.value) return
-    saving.value = true
-    try {
-      currentProject.value.updatedAt = new Date().toISOString()
-      normalizeProject(currentProject.value)
-      let saved = clone(currentProject.value)
-      if (window.lowcode) saved = await window.lowcode.saveProject(saved)
-      else localStorage.setItem('codeless-projects', JSON.stringify(projects.value))
-      const index = projects.value.findIndex(project => project.id === saved.id)
-      if (index >= 0) projects.value[index] = saved
-      await publishCollaborationProject(saved)
-      dirty.value = false
-      notify(message)
-    } catch (error) {
-      console.error(error)
-      notify('保存失败，请重试', 'danger')
-    } finally {
-      saving.value = false
+  function snapshotProject(project: LowCodeProject) {
+    project.updatedAt = new Date().toISOString()
+    normalizeProject(project)
+    return clone(project)
+  }
+
+  function matchesSnapshot(project: LowCodeProject | undefined, snapshot: LowCodeProject) {
+    return Boolean(project && JSON.stringify(project) === JSON.stringify(snapshot))
+  }
+
+  function enqueueSave(project: LowCodeProject, message: string) {
+    const snapshot = snapshotProject(project)
+    return new Promise<void>(resolve => {
+      const pending = pendingSaves.get(snapshot.id)
+      if (pending) {
+        // Coalesce debounce bursts while preserving every caller that needs to
+        // wait for a durable save (for example a page switch).
+        pending.snapshot = snapshot
+        pending.message = message
+        const previousResolve = pending.resolve
+        pending.resolve = () => {
+          previousResolve()
+          resolve()
+        }
+      } else {
+        pendingSaves.set(snapshot.id, { snapshot, message, resolve })
+      }
+      void drainSaveQueue()
+    })
+  }
+
+  function requeueLatestProject(projectId: string, request: SaveRequest) {
+    const latest = projects.value.find(project => project.id === projectId)
+    if (!latest) {
+      request.resolve()
+      return
     }
+
+    const latestSnapshot = snapshotProject(latest)
+    const pending = pendingSaves.get(projectId)
+    if (pending) {
+      // A newer caller is already waiting. Make its snapshot match the current
+      // live project and chain this in-flight caller behind the same write.
+      pending.snapshot = latestSnapshot
+      pending.message = request.message
+      const previousResolve = pending.resolve
+      pending.resolve = () => {
+        previousResolve()
+        request.resolve()
+      }
+      return
+    }
+
+    pendingSaves.set(projectId, {
+      snapshot: latestSnapshot,
+      message: request.message,
+      resolve: request.resolve,
+    })
+  }
+
+  async function drainSaveQueue() {
+    if (saveDrain) return saveDrain
+    saveDrain = (async () => {
+      saving.value = true
+      try {
+        while (pendingSaves.size) {
+          const [projectId, request] = pendingSaves.entries().next().value as [string, SaveRequest]
+          pendingSaves.delete(projectId)
+          try {
+            const saved = window.lowcode
+              ? await window.lowcode.saveProject(clone(request.snapshot))
+              : browserSaveProject(request.snapshot)
+            const current = projects.value.find(project => project.id === projectId)
+
+            // IPC may complete after another component change, drag, resize or
+            // page-property edit. Never write the stale IPC response into Vue
+            // state; queue the newest live snapshot instead.
+            if (!matchesSnapshot(current, request.snapshot)) {
+              requeueLatestProject(projectId, request)
+              continue
+            }
+
+            await publishCollaborationProject(saved)
+            const latest = projects.value.find(project => project.id === projectId)
+            if (!matchesSnapshot(latest, request.snapshot)) {
+              requeueLatestProject(projectId, request)
+              continue
+            }
+
+            if (currentProjectId.value === projectId) dirty.value = false
+            notify(request.message)
+            request.resolve()
+          } catch (error) {
+            console.error(error)
+            // Leave dirty state intact so the next edit or manual save retries.
+            notify('?????????????????', 'danger')
+            request.resolve()
+          }
+        }
+      } finally {
+        saving.value = false
+        saveDrain = null
+        if (pendingSaves.size) void drainSaveQueue()
+      }
+    })()
+    return saveDrain
+  }
+
+  function saveProject(message = '?????? SQLite') {
+    const project = currentProject.value
+    if (!project) return Promise.resolve()
+    return enqueueSave(project, message)
   }
 
   async function exportProject() {
