@@ -63,8 +63,8 @@ export function useDataModel(
         tableTotal.value = result.total
       }
     } catch (error) {
-      console.error('???????:', error)
-      notify('??????', 'danger')
+      console.error('加载数据失败：', error)
+      notify('加载数据失败', 'danger')
     } finally {
       tableLoading.value = false
     }

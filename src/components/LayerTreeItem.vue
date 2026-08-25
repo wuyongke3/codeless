@@ -18,7 +18,8 @@ const children = computed(() => props.widgets
   .filter(item => item.parentId === props.widget.id)
   .sort((a, b) => getWidgetConfig(b).layout.zIndex - getWidgetConfig(a).layout.zIndex))
 const isContainer = computed(() => isContainerType(props.widget.type))
-const interactionLocked = computed(() => props.state.isWidgetLocked?.(props.widget.id) ?? Boolean(props.widget.config?.layout?.locked))
+const selfLocked = computed(() => props.state.isWidgetSelfLocked?.(props.widget.id) ?? Boolean(props.widget.config?.layout?.locked))
+const interactionLocked = computed(() => props.state.isWidgetLocked?.(props.widget.id) ?? selfLocked.value)
 const dropPosition = ref<'before' | 'after' | 'inside' | ''>('')
 
 function toggleExpanded() {
@@ -100,6 +101,16 @@ function endDrag() {
   clearDragTarget()
 }
 
+function toggleVisibility(event: MouseEvent) {
+  event.stopPropagation()
+  props.state.toggleWidgetHidden?.(props.widget.id)
+}
+
+function toggleLock(event: MouseEvent) {
+  event.stopPropagation()
+  props.state.toggleWidgetLocked?.(props.widget.id)
+}
+
 function drop(event: DragEvent) {
   event.preventDefault()
   event.stopPropagation()
@@ -113,9 +124,9 @@ function drop(event: DragEvent) {
 
 <template>
   <div class="layer-tree-node">
-    <div class="layer-item" :class="{ active: state.selectedWidgetIds.includes(widget.id), dragging, 'is-container': isContainer, 'is-hidden': widget.config?.layout?.hidden, locked: interactionLocked, 'drop-target': state.dropTargetContainerId === widget.id, 'drop-before': dropPosition === 'before', 'drop-after': dropPosition === 'after', 'drop-inside': dropPosition === 'inside' }" :style="{ paddingLeft: `${6 + depth * 14}px` }" :draggable="!interactionLocked" @dragstart="startDrag" @dragover="dragOver" @dragleave="handleDragLeave" @drop="drop" @dragend="endDrag" @click="state.handleWidgetClick?.(widget.id, $event)" @contextmenu.stop.prevent="state.handleWidgetContextMenu?.($event, widget.id)">
+    <div class="layer-item" :data-layer-id="widget.id" :class="{ active: state.selectedWidgetIds.includes(widget.id), dragging, 'is-container': isContainer, 'is-hidden': widget.config?.layout?.hidden, locked: interactionLocked, 'drop-target': state.dropTargetContainerId === widget.id, 'drop-before': dropPosition === 'before', 'drop-after': dropPosition === 'after', 'drop-inside': dropPosition === 'inside' }" :style="{ paddingLeft: `${6 + depth * 14}px` }" :draggable="!interactionLocked" @dragstart="startDrag" @dragover="dragOver" @dragleave="handleDragLeave" @drop="drop" @dragend="endDrag" @click="state.handleWidgetClick?.(widget.id, $event)" @contextmenu.stop.prevent="state.handleWidgetContextMenu?.($event, widget.id)">
       <button v-if="isContainer" class="layer-toggle" :aria-label="isExpanded ? '收起图层' : '展开图层'" @click.stop="toggleExpanded"><AppIcon :name="isExpanded ? 'chevron-down' : 'chevron-right'" :size="11" /></button><span v-else class="layer-toggle-spacer"></span>
-      <span class="layer-icon"><AppIcon :name="widgetDefinitionMap[widget.type]?.icon || 'apps'" :size="13" /></span><strong>{{ widget.name }}</strong><small v-if="isContainer">{{ children.length }} 个</small><AppIcon v-if="widget.config?.layout?.hidden" name="eye" :size="10" /><AppIcon v-if="interactionLocked" name="lock" :size="10" />
+      <span class="layer-icon"><AppIcon :name="widgetDefinitionMap[widget.type]?.icon || 'apps'" :size="13" /></span><strong>{{ widget.name }}</strong><small v-if="isContainer">{{ children.length }} 个</small><span class="layer-item-actions"><button type="button" :class="{ active: !widget.config?.layout?.hidden }" :aria-label="widget.config?.layout?.hidden ? '显示图层' : '隐藏图层'" :title="widget.config?.layout?.hidden ? '显示图层' : '隐藏图层'" @click="toggleVisibility"><AppIcon :name="widget.config?.layout?.hidden ? 'eye-off' : 'eye'" :size="12" /></button><button type="button" :class="{ active: selfLocked }" :aria-label="selfLocked ? '解锁图层' : '锁定图层'" :title="selfLocked ? '解锁图层' : '锁定图层'" @click="toggleLock"><AppIcon :name="selfLocked ? 'lock' : 'unlock'" :size="12" /></button></span>
     </div>
     <div v-if="isExpanded && !virtual" class="layer-children">
       <LayerTreeItem v-for="child in children" :key="child.id" :widget="child" :widgets="widgets" :state="state" :depth="depth + 1" />

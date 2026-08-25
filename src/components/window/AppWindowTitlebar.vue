@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, shallowRef } from 'vue'
 import AppIcon from '../AppIcon.vue'
 
+const emit = defineEmits<{ 'open-settings': [] }>()
+
 const maximized = shallowRef(false)
 const controls = typeof window !== 'undefined' ? window.lowcode?.window : undefined
 let stopListening: (() => void) | undefined
@@ -68,6 +70,9 @@ onBeforeUnmount(() => stopListening?.())
     </div>
     <div class="app-window-caption" aria-hidden="true">Design and build locally</div>
     <div class="app-window-controls" role="group" aria-label="Window controls" data-no-drag @dblclick.stop>
+      <button class="app-window-settings" type="button" aria-label="打开显示设置" title="显示设置" @click="emit('open-settings')">
+        <AppIcon name="settings" :size="15" />
+      </button>
       <button type="button" aria-label="Minimize window" title="Minimize" @click="minimize">
         <AppIcon name="window-minimize" :size="15" />
       </button>

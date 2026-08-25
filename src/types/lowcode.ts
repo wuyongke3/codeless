@@ -275,6 +275,11 @@ export interface WidgetContentConfig {
   columnsCount?: number
   flex?: boolean
   shape?: 'circle' | 'square'
+  disabled?: boolean
+  readOnly?: boolean
+  loading?: boolean
+  emptyText?: string
+  showIndex?: boolean
 }
 
 export interface WidgetStyleConfig {
@@ -388,7 +393,7 @@ export interface WidgetConfig {
   layout: WidgetLayoutConfig
   content: WidgetContentConfig
   style: WidgetStyleConfig
-  /** ????????? button.content.variant ????? */
+  /** 当前激活的组件变体，例如 button.content.variant。 */
   variant?: string
   variants?: Record<string, WidgetVariantConfig>
   /** Optional link to a project-local reusable component definition. */
@@ -505,9 +510,9 @@ export interface LowCodeProject {
   status: 'draft' | 'published'
   category: string
   layout: PageLayout
-  /** ?????????????????????????? */
+  /** 项目级设计系统，用于统一管理颜色、间距、圆角和字体 Token。 */
   designSystem?: DesignSystem
-  /** ????????????? Diff???????????? */
+  /** 项目级评审状态，用于保存评审记录和 Diff 结果。 */
   review?: ProjectReviewState
   /** 多页面扩展；旧项目仅有 layout 时由 normalizeProject 自动补齐。 */
   /** Project-local reusable components; no network library is required. */

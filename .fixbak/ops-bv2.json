@@ -1,0 +1,7 @@
+[
+  {"line": 1036, "find": "<span>[^<]*</span><select :value=\"state.selectedWidget.config.style.tokenRefs?.accent", "replace": "<span>强调色</span><select :value=\"state.selectedWidget.config.style.tokenRefs?.accent"},
+  {"line": 1042, "find": "<span>[^<]*</span><select :value=\"state.selectedWidget.config.style.tokenRefs?.color", "replace": "<span>文本色</span><select :value=\"state.selectedWidget.config.style.tokenRefs?.color"},
+  {"line": 1093, "find": "value=\"count[^<]*</option>", "replace": "value=\"count\">记录数</option>"},
+  {"line": 1093, "find": "value=\"aggregate[^<]*</option>", "replace": "value=\"aggregate\">聚合计算</option>"},
+  {"line": 1129, "find": "妯℃澘", "replace": "模板", "literal": true}
+]

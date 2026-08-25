@@ -172,7 +172,7 @@ export function useProjectManager(options: ProjectManagerOptions) {
           } catch (error) {
             console.error(error)
             // Leave dirty state intact so the next edit or manual save retries.
-            notify('?????????????????', 'danger')
+            notify('本地保存失败，请稍后重试', 'danger')
             request.resolve()
           }
         }
@@ -185,7 +185,7 @@ export function useProjectManager(options: ProjectManagerOptions) {
     return saveDrain
   }
 
-  function saveProject(message = '?????? SQLite') {
+  function saveProject(message = '项目已保存到 SQLite') {
     const project = currentProject.value
     if (!project) return Promise.resolve()
     return enqueueSave(project, message)

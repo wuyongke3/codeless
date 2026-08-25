@@ -81,7 +81,6 @@ onBeforeUnmount(() => {
 <template>
   <header class="builder-toolbar" aria-label="页面设计器工具栏">
     <div class="builder-context" title="当前编辑上下文">
-      <span class="builder-context-mark"><AppIcon name="layers" :size="16" /></span>
       <div class="builder-context-copy">
         <strong class="builder-project-name">{{ projectName }}</strong>
         <div class="builder-breadcrumb">

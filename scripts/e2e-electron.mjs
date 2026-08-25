@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 
@@ -73,7 +73,7 @@ function widgetSnapshot() {
 async function clickWidget(id, shiftKey = false) {
   return inRenderer((widgetId, additive) => {
     const element = document.querySelector(`[data-widget-id="${widgetId}"]`)
-    if (!element) throw new Error(`鎵句笉鍒扮粍浠?${widgetId}`)
+    if (!element) throw new Error(`未找到组件：${widgetId}`)
     element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, shiftKey: additive }))
   }, id, shiftKey)
 }
@@ -81,7 +81,7 @@ async function clickWidget(id, shiftKey = false) {
 async function rightClickWidget(id, clientX = 260, clientY = 220) {
   return inRenderer((widgetId, x, y) => {
     const element = document.querySelector(`[data-widget-id="${widgetId}"]`)
-    if (!element) throw new Error(`鎵句笉鍒扮粍浠?${widgetId}`)
+    if (!element) throw new Error(`未找到组件：${widgetId}`)
     element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, button: 2, clientX: x, clientY: y }))
   }, id, clientX, clientY)
 }
@@ -90,7 +90,7 @@ async function clickMenu(command) {
   return inRenderer(commandValue => {
     const button = document.querySelector(`[data-menu-command="${commandValue}"]`)
     if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
-    if (button.disabled) throw new Error(`鎵句笉鍒拌彍鍗曞懡浠?${commandValue}`)
+    if (button.disabled) throw new Error(`菜单命令已禁用：${commandValue}`)
     button.click()
   }, command)
 }
@@ -123,7 +123,7 @@ async function setInspectorField(widgetId, label, value) {
     const section = document.querySelector('.component-config-section')
     const field = Array.from(section.querySelectorAll('.property-field, .property-check')).find(node => node.textContent?.includes(fieldLabel))
     const control = field?.querySelector('input, textarea, select')
-    if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement || control instanceof HTMLSelectElement)) throw new Error(`鎵句笉鍒伴厤缃瓧娈碉細${fieldLabel}`)
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement || control instanceof HTMLSelectElement)) throw new Error(`字段控件不存在：${fieldLabel}`)
     if (control instanceof HTMLInputElement && control.type === 'checkbox') {
       control.checked = Boolean(fieldValue)
       control.dispatchEvent(new Event('change', { bubbles: true }))
@@ -218,19 +218,23 @@ async function main() {
     })
     assert.equal(canvas.width, 960)
     assert.equal(canvas.height, 720)
-    assert.ok(snapshot.length >= 5, `鍒濆缁勪欢鏁颁笉瓒筹細${snapshot.length}`)
+    assert.ok(snapshot.length >= 5, `组件库数量不足：${snapshot.length}`)
     assert.ok(snapshot.every(item => item.display !== 'none' && item.width > 0 && item.height > 0), 'invisible or zero-size widget found')
     initialIds = snapshot.slice(0, 3).map(item => item.id)
-    assert.equal(new Set(snapshot.map(item => item.id)).size, snapshot.length, '缁勪欢 ID 涓嶅敮涓€')
+    assert.equal(new Set(snapshot.map(item => item.id)).size, snapshot.length, '组件 ID 不唯一')
   })
 
   await runCase('default AppTopbar is not rendered', async () => {
     const headers = await inRenderer(() => ({
       globalTopbar: document.querySelector('.topbar') instanceof HTMLElement,
       builderToolbar: document.querySelector('.builder-toolbar') instanceof HTMLElement,
+      routeBrand: document.querySelector('.route-brand') instanceof HTMLElement,
+      createApplication: document.querySelector('.route-create-button') instanceof HTMLButtonElement,
     }))
     assert.equal(headers.globalTopbar, false, 'the removed global AppTopbar is still rendered in the builder')
     assert.equal(headers.builderToolbar, true, 'the local Builder toolbar must remain available')
+    assert.equal(headers.routeBrand, false, 'the redundant route logo is still rendered beside the create action')
+    assert.equal(headers.createApplication, true, 'the create application action must remain available')
   })
   await runCase('custom window titlebar and responsive density', async () => {
     const initial = await inRenderer(() => {
@@ -249,8 +253,9 @@ async function main() {
       }
     })
     assert.equal(initial.titlebar, true, 'custom Electron titlebar is missing')
-    assert.equal(initial.controls, 3, 'custom titlebar must expose three window controls')
-    assert.deepEqual(initial.labels, ['Minimize window', 'Maximize window', 'Close window'])
+    assert.equal(initial.controls, 4, 'custom titlebar must expose display settings and three window controls')
+    assert.ok(initial.labels[0], 'display settings control must have an accessible label')
+    assert.deepEqual(initial.labels.slice(1), ['Minimize window', 'Maximize window', 'Close window'])
     assert.equal(initial.dragRegion, 'drag', 'titlebar must provide a draggable region')
     assert.ok(initial.scale, 'responsive UI scale token is missing')
     assert.ok(initial.titlebarHeight >= 40, 'titlebar is too small for reliable pointer interaction')
@@ -273,14 +278,41 @@ async function main() {
     await sleep(100)
   })
 
+  await runCase('top display settings persist theme and font preferences', async () => {
+    await inRenderer(() => {
+      const button = document.querySelector('.app-window-settings')
+      if (!(button instanceof HTMLButtonElement)) throw new Error('Display settings button not found')
+      button.click()
+    })
+    await waitFor(() => inRenderer(() => Boolean(document.querySelector('.app-settings-panel'))))
+    await inRenderer(() => {
+      const darkTheme = document.querySelector('.settings-option-grid input[value="dark"]')
+      const largeFont = document.querySelector('.font-grid input[value="large"]')
+      if (!(darkTheme instanceof HTMLInputElement) || !(largeFont instanceof HTMLInputElement)) throw new Error('Display preference inputs not found')
+      darkTheme.click()
+      largeFont.click()
+    })
+    await waitFor(() => inRenderer(() => document.documentElement.dataset.theme === 'dark' && document.documentElement.dataset.fontSize === 'large'))
+    const persisted = await inRenderer(() => JSON.parse(window.localStorage.getItem('codeless-app-preferences') || '{}'))
+    assert.equal(persisted.theme, 'dark', 'theme preference was not persisted')
+    assert.equal(persisted.fontSize, 'large', 'font preference was not persisted')
+    await inRenderer(() => {
+      const reset = document.querySelector('.app-settings-panel footer button')
+      if (!(reset instanceof HTMLButtonElement)) throw new Error('Reset preferences button not found')
+      reset.click()
+      const close = document.querySelector('.app-settings-header button')
+      if (!(close instanceof HTMLButtonElement)) throw new Error('Close settings button not found')
+      close.click()
+    })
+    await waitFor(() => inRenderer(() => !document.querySelector('.app-settings-panel') && document.documentElement.dataset.fontSize === 'medium'))
+  })
+
   await runCase('autosave persists final widget content and layout', async () => {
     const before = await inRenderer(widgetId => {
       const widget = document.querySelector(`[data-widget-id="${widgetId}"]`)
       if (!(widget instanceof HTMLElement)) throw new Error('autosave widget target not found')
       widget.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
-      const sections = document.querySelectorAll('.inspector-scroll .property-section')
-      const inputs = sections[1]?.querySelectorAll('input') || []
-      const contentInput = inputs[1]
+      const contentInput = document.querySelector('.inspector-scroll .property-section .property-field input')
       if (!(contentInput instanceof HTMLInputElement)) throw new Error('widget content inspector field not found')
       return {
         content: contentInput.value,
@@ -292,8 +324,7 @@ async function main() {
     const nextContent = `Autosave final state ${Date.now()}`
     await inRenderer(({ widgetId, content }) => {
       const widget = document.querySelector(`[data-widget-id="${widgetId}"]`)
-      const sections = document.querySelectorAll('.inspector-scroll .property-section')
-      const contentInput = sections[1]?.querySelectorAll('input')[1]
+      const contentInput = document.querySelector('.inspector-scroll .property-section .property-field input')
       if (!(widget instanceof HTMLElement) || !(contentInput instanceof HTMLInputElement)) throw new Error('autosave edit targets not found')
       const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
       descriptor?.set?.call(contentInput, content)
@@ -320,14 +351,14 @@ async function main() {
       const projects = raw ? JSON.parse(raw) : []
       const widget = projects.flatMap(project => project.pages || []).flatMap(page => page.layout?.widgets || [])
         .find(item => item.id === widgetId)
-      return widget?.config?.content?.text === content
+      return widget?.name === content
         && `${widget?.config?.layout?.x}px` === frame.left
         && `${widget?.config?.layout?.y}px` === frame.top
     }, { widgetId: initialIds[0], content: nextContent, frame: latest }), 4000, 50)
   })
   await runCase('Create Page creates and activates an independent blank page', async () => {
     await inRenderer(() => {
-      const pagesTab = document.querySelectorAll('.panel-tabs button')[1]
+      const pagesTab = document.querySelector('[data-panel-tab="pages"]')
       if (!(pagesTab instanceof HTMLButtonElement)) throw new Error('Pages palette tab not found')
       pagesTab.click()
     })
@@ -393,10 +424,52 @@ async function main() {
     }, before.activePath)
     await waitFor(() => inRenderer(widgetCount => document.querySelectorAll('.canvas-widget').length === widgetCount, before.widgetCount))
     await inRenderer(() => {
-      const componentsTab = document.querySelectorAll('.panel-tabs button')[0]
+      const componentsTab = document.querySelector('[data-panel-tab="components"]')
       if (!(componentsTab instanceof HTMLButtonElement)) throw new Error('Components palette tab not found')
       componentsTab.click()
     })
+  })
+
+  await runCase('Layers panel uses the current page artboard and layer visibility controls', async () => {
+    await inRenderer(() => {
+      const layersTab = document.querySelector('[data-panel-tab="layers"]')
+      if (!(layersTab instanceof HTMLButtonElement)) throw new Error('Layers palette tab not found')
+      layersTab.click()
+    })
+    await waitFor(() => inRenderer(() => document.querySelector('.layer-page-root-row') instanceof HTMLButtonElement))
+
+    const targetId = await inRenderer(() => {
+      const row = document.querySelector('[data-layer-id]')
+      const root = document.querySelector('.layer-page-root-row')
+      if (!(row instanceof HTMLElement) || !(root instanceof HTMLButtonElement)) throw new Error('Artboard or layer row not found')
+      row.click()
+      return row.dataset.layerId || ''
+    })
+    assert.ok(targetId, 'a layer row must expose its widget identity')
+    await waitFor(() => inRenderer(id => document.querySelector(`[data-widget-id="${id}"]`)?.classList.contains('selected'), targetId))
+
+    await inRenderer(id => {
+      const row = document.querySelector(`[data-layer-id="${id}"]`)
+      const hideButton = row?.querySelector('button[aria-label="\u9690\u85cf\u56fe\u5c42"]')
+      if (!(hideButton instanceof HTMLButtonElement)) throw new Error('Hide layer action not found')
+      hideButton.click()
+    }, targetId)
+    await waitFor(() => inRenderer(id => document.querySelector(`[data-widget-id="${id}"]`)?.classList.contains('hidden'), targetId))
+
+    await inRenderer(id => {
+      const row = document.querySelector(`[data-layer-id="${id}"]`)
+      const showButton = row?.querySelector('button[aria-label="\u663e\u793a\u56fe\u5c42"]')
+      if (!(showButton instanceof HTMLButtonElement)) throw new Error('Show layer action not found')
+      showButton.click()
+    }, targetId)
+    await waitFor(() => inRenderer(id => !document.querySelector(`[data-widget-id="${id}"]`)?.classList.contains('hidden'), targetId))
+
+    await inRenderer(() => {
+      const componentsTab = document.querySelector('[data-panel-tab="components"]')
+      if (!(componentsTab instanceof HTMLButtonElement)) throw new Error('Components palette tab not found')
+      componentsTab.click()
+    })
+    await waitFor(() => inRenderer(() => document.querySelector('.component-scroll') instanceof HTMLElement))
   })
 
   await runCase('Page properties update canvas size, position, and background', async () => {
@@ -601,7 +674,7 @@ async function main() {
         mode: card?.textContent?.includes('\u540c\u673a\u534f\u4f5c\u5df2\u5f00\u542f') ? 'same-device' : 'unknown',
         hasSessionId: Boolean(inputs[0]?.value),
         hasToken: Boolean(inputs[1]?.value),
-        hasLanAddress: Boolean(card?.querySelector('input[readonly]') && card?.textContent?.includes('灞€鍩熺綉鍦板潃')),
+        hasLanAddress: Boolean(card?.querySelector('input[readonly]') && card?.textContent?.includes('局域网地址')),
       }
     })
     assert.equal(session.mode, 'same-device', 'created session unexpectedly uses LAN mode')
@@ -633,8 +706,8 @@ async function main() {
         exportDisabled: exportButton instanceof HTMLButtonElement ? exportButton.disabled : true,
       }
     })
-    assert.equal(controls.importExists, true, '缂哄皯璁捐 JSON 瀵煎叆鍏ュ彛')
-    assert.equal(controls.exportExists, true, '缂哄皯璁捐 JSON 瀵煎嚭鍏ュ彛')
+    assert.equal(controls.importExists, true, '缺少设计 JSON 导入入口')
+    assert.equal(controls.exportExists, true, '缺少设计 JSON 导出入口')
     assert.equal(controls.importDisabled, false, 'design JSON import must be enabled')
     assert.equal(controls.exportDisabled, false, 'design JSON export must be enabled')
 
@@ -661,7 +734,7 @@ async function main() {
     })
     await sleep(80)
     const errors = await inRenderer(() => window.__codelessE2eErrors || [])
-    assert.deepEqual(errors, [], `璁捐浜ゆ崲鍏ュ彛浜х敓 renderer error锛?{errors.join('; ')}`)
+    assert.deepEqual(errors, [], `设计交换入口产生 renderer error：${errors.join('; ')}`)
   })
   await runCase('component size position hierarchy and zoom mapping', async () => {
     const data = await inRenderer(() => {
@@ -704,8 +777,8 @@ async function main() {
         opacity: pattern ? getComputedStyle(pattern).opacity : '',
       }
     })
-    assert.equal(initial.gridExists, true, '缃戞牸寮€鍏充笉瀛樺湪')
-    assert.equal(initial.snapExists, true, '鏅鸿兘鍚搁檮寮€鍏充笉瀛樺湪')
+    assert.equal(initial.gridExists, true, '网格开关不存在')
+    assert.equal(initial.snapExists, true, '智能吸附开关不存在')
     assert.equal(initial.gridActive, true, 'grid should be enabled by default')
     assert.equal(initial.snapActive, true, 'smart snap should be enabled by default')
     assert.equal(initial.opacity, '1', 'grid layer should be visible by default')
@@ -720,7 +793,7 @@ async function main() {
       active: document.querySelector('[data-testid="canvas-grid-toggle"]')?.classList.contains('active') || false,
       opacity: getComputedStyle(document.querySelector('.canvas-grid-pattern')).opacity,
     }))
-    assert.equal(hidden.active, false, '缃戞牸鍏抽棴鍚庢寜閽粛涓?active')
+    assert.equal(hidden.active, false, '关闭网格后按钮仍处于 active')
     assert.equal(hidden.opacity, '0', 'grid layer opacity did not change')
 
     await inRenderer(() => {
@@ -734,7 +807,7 @@ async function main() {
       button.click()
     })
     await sleep(30)
-    assert.equal(await inRenderer(() => document.querySelector('[data-testid="canvas-snap-toggle"]')?.classList.contains('active') || false), false, '鍏抽棴鍚搁檮鍚庢寜閽粛涓?active')
+    assert.equal(await inRenderer(() => document.querySelector('[data-testid="canvas-snap-toggle"]')?.classList.contains('active') || false), false, '关闭吸附后按钮仍处于 active')
     await inRenderer(() => {
       const button = document.querySelector('[data-testid="canvas-snap-toggle"]')
     if (!(button instanceof HTMLButtonElement)) throw new Error('required button not found')
@@ -748,7 +821,7 @@ async function main() {
     await clickWidget(initialIds[2], true)
     await waitFor(() => inRenderer(() => Boolean(document.querySelector('.canvas-selection-toolbar'))))
     const selected = await inRenderer(() => document.querySelectorAll('.canvas-widget.selected').length)
-    assert.equal(selected, 3, `澶氶€夌粍浠舵暟閲忓紓甯革細${selected}`)
+    assert.equal(selected, 3, `多选操作应选中 3 个组件：${selected}`)
     const before = await inRenderer(ids => ids.map(id => ({
       id,
       left: Number.parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left),
@@ -760,13 +833,13 @@ async function main() {
     })
     await sleep(70)
     const after = await inRenderer(ids => ids.map(id => Number.parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left)), initialIds)
-    assert.equal(new Set(after).size, 1, `宸﹀榻愮粨鏋滀笉涓€鑷达細${after.join(', ')}`)
-    assert.ok(new Set(before.map(item => item.left)).size > 1, `娴嬭瘯鍒濆浣嶇疆鏈舰鎴愬彲楠岃瘉宸紓锛?{JSON.stringify(before)}`)
+    assert.equal(new Set(after).size, 1, `左对齐结果不一致：${after.join(', ')}`)
+    assert.ok(new Set(before.map(item => item.left)).size > 1, `测试初始位置未形成可验证差异：${JSON.stringify(before)}`)
 
     await inRenderer(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })))
     await sleep(70)
     const undone = await inRenderer(ids => ids.map(id => Number.parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left)), initialIds)
-    assert.deepEqual(undone, before.map(item => item.left), `宸﹀榻愭搷浣滄湭琚挙閿€锛?{JSON.stringify({ before, undone })}`)
+    assert.deepEqual(undone, before.map(item => item.left), `左对齐操作未被撤销：${JSON.stringify({ before, undone })}`)
     await clearSelection()
   })
 
@@ -808,26 +881,26 @@ async function main() {
     await inRenderer((x, y) => window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, buttons: 0, isPrimary: true, pointerId: 7, clientX: x, clientY: y })), rect.left + 420, rect.top + 190)
     await sleep(50)
     const selected = await inRenderer(() => document.querySelectorAll('.canvas-widget.selected').length)
-    assert.ok(selected >= 1, `妗嗛€夋湭鍛戒腑缁勪欢锛宻elected=${selected}`)
+    assert.ok(selected >= 1, `框选未命中组件，selected=${selected}`)
     assert.equal(await inRenderer(() => Boolean(document.querySelector('.canvas-selection-box'))), false, 'marquee selection box was not cleared')
     await clearSelection()
   })
 
   await runCase('component panel coverage', async () => {
     allTypes = await inRenderer(() => Array.from(document.querySelectorAll('.component-grid button')).map(node => node.dataset.widgetType).filter(Boolean))
-    assert.ok(allTypes.length >= 20, `缁勪欢闈㈡澘绫诲瀷鏁伴噺寮傚父锛?{allTypes.length}`)
+    assert.ok(allTypes.length >= 20, `组件类型数量异常：${allTypes.length}`)
     for (const type of allTypes) {
       await inRenderer(typeValue => {
         const button = Array.from(document.querySelectorAll('.component-grid button')).find(node => node.dataset.widgetType === typeValue)
-        if (!button) throw new Error(`缁勪欢闈㈡澘缂哄皯 ${typeValue}`)
+        if (!button) throw new Error(`组件面板缺少 ${typeValue}`)
         button.click()
       }, type)
     }
     await sleep(120)
     const renderedTypes = await inRenderer(() => Array.from(new Set(Array.from(document.querySelectorAll('.canvas-widget')).map(node => node.dataset.widgetType))))
-    assert.ok(allTypes.every(type => renderedTypes.includes(type)), `鏈覆鏌撶被鍨嬶細${allTypes.filter(type => !renderedTypes.includes(type)).join(',')}`)
+    assert.ok(allTypes.every(type => renderedTypes.includes(type)), `批量添加后存在未渲染组件：${allTypes.filter(type => !renderedTypes.includes(type)).join(',')}`)
     const ids = await inRenderer(() => Array.from(document.querySelectorAll('.canvas-widget')).map(node => node.dataset.widgetId))
-    assert.equal(new Set(ids).size, ids.length, '鎵归噺娣诲姞鍚庣粍浠?ID 閲嶅')
+    assert.equal(new Set(ids).size, ids.length, '批量添加后组件 ID 重复')
   })
 
   await runCase('Element Plus component rendering', async () => {
@@ -858,17 +931,17 @@ async function main() {
       }
     }), expected)
     for (const item of checks) {
-      assert.equal(item.exists, true, `缂哄皯 ${item.type} 鐢诲竷鑺傜偣`)
-      assert.equal(item.rendered, true, `${item.type} 鍐呴儴娓叉煋鑺傜偣缂哄け`)
-      assert.ok(item.width > 0 && item.height > 0, `${item.type} 娓叉煋灏哄鏃犳晥锛?{item.width}x${item.height}`)
+      assert.equal(item.exists, true, `缺少 ${item.type} 画布节点`)
+      assert.equal(item.rendered, true, `${item.type} 内部渲染节点缺失`)
+      assert.ok(item.width > 0 && item.height > 0, `${item.type} 渲染尺寸无效：${item.width}x${item.height}`)
     }
     const progress = checks.find(item => item.type === 'progress')
-    assert.equal(progress?.progressWidth, '68%', '杩涘害鏉￠粯璁ょ櫨鍒嗘瘮鏈槧灏勫埌杞ㄩ亾瀹藉害')
-    assert.equal(checks.find(item => item.type === 'switch')?.switchPressed, 'true', '寮€鍏抽粯璁ょ姸鎬佹湭娓叉煋')
+    assert.equal(progress?.progressWidth, '68%', '进度条默认百分比未映射到轨道宽度')
+    assert.equal(checks.find(item => item.type === 'switch')?.switchPressed, 'true', '开关默认状态未渲染')
     assert.ok((checks.find(item => item.type === 'checkbox')?.checkboxCount || 0) >= 1, 'checkbox input is missing')
-    assert.ok((checks.find(item => item.type === 'radio')?.radioCount || 0) >= 2, '鍗曢€夋閫夐」缂哄け')
-    assert.ok((checks.find(item => item.type === 'pagination')?.paginationButtons || 0) >= 3, '鍒嗛〉鎸夐挳缂哄け')
-    assert.equal(checks.find(item => item.type === 'tabs')?.activeTabs, 1, '鏍囩椤垫病鏈夊敮涓€婵€娲婚」')
+    assert.ok((checks.find(item => item.type === 'radio')?.radioCount || 0) >= 2, '单选框选项缺失')
+    assert.ok((checks.find(item => item.type === 'pagination')?.paginationButtons || 0) >= 3, '分页按钮缺失')
+    assert.equal(checks.find(item => item.type === 'tabs')?.activeTabs, 1, '标签页没有唯一激活项')
     assert.equal(checks.find(item => item.type === 'collapse')?.collapseExpanded, 'true', 'collapse panel should be expanded')
     assert.equal(checks.find(item => item.type === 'collapse')?.collapsePanelDisplay, 'block', 'collapse panel content is not visible')
     assert.equal(checks.find(item => item.type === 'tooltip')?.tooltipOpacity, '1', 'tooltip did not become visible')
@@ -881,13 +954,13 @@ async function main() {
     const modalId = await widgetIdByType('modal')
     const drawerId = await widgetIdByType('drawer')
     const loadingId = await widgetIdByType('loading')
-    assert.ok(tagId && alertId && checkboxId && modalId && drawerId && loadingId, '杩愯鎬佹祴璇曠粍浠舵湭鍒涘缓')
+    assert.ok(tagId && alertId && checkboxId && modalId && drawerId && loadingId, '运行态测试组件未创建')
     await setInspectorField(tagId, '\u53ef\u5173\u95ed', true)
     await setInspectorField(alertId, '\u53ef\u5173\u95ed', true)
-    await setInspectorField(checkboxId, '\u591a\u9009\u9879', '\u9009\u9879\u4e00|option-1\n\u9009\u9879\u4e8c|option-2')
-    await setInspectorField(modalId, '\u9ed8\u8ba4\u663e\u793a', true)
-    await setInspectorField(drawerId, '\u9ed8\u8ba4\u663e\u793a', true)
-    await setInspectorField(loadingId, '\u9ed8\u8ba4\u663e\u793a', true)
+    await setInspectorField(checkboxId, '静态选项', '选项一|option-1\n选项二|option-2')
+    await setInspectorField(modalId, '默认可见', true)
+    await setInspectorField(drawerId, '默认可见', true)
+    await setInspectorField(loadingId, '默认可见', true)
 
     await openPreview()
     const runtime = await inRenderer(() => ({
@@ -896,9 +969,9 @@ async function main() {
       dateType: document.querySelector('.runtime-widget-node.widget-datePicker input')?.type,
       serviceNodes: document.querySelectorAll('.runtime-widget-node.widget-modal, .runtime-widget-node.widget-drawer, .runtime-widget-node.widget-loading').length,
     }))
-    assert.ok(runtime.count >= allTypes.length, `杩愯鎬佽妭鐐规暟閲忎笉瓒筹細${runtime.count}`)
-    assert.ok(allTypes.every(type => runtime.types.includes(type)), `杩愯鎬佺己灏戠粍浠讹細${allTypes.filter(type => !runtime.types.includes(type)).join(',')}`)
-    assert.equal(runtime.dateType, 'date', '鏃ユ湡閫夋嫨鍣ㄦ病鏈変娇鐢?date input')
+    assert.ok(runtime.count >= allTypes.length, `运行态组件数量不足：${runtime.count}`)
+    assert.ok(allTypes.every(type => runtime.types.includes(type)), `运行态组件未全部渲染：${allTypes.filter(type => !runtime.types.includes(type)).join(',')}`)
+    assert.equal(runtime.dateType, 'date', '日期选择器没有使用 date input')
     assert.equal(runtime.serviceNodes, 3, 'runtime service node count is incorrect')
 
     const switchBefore = await inRenderer(() => document.querySelector('.runtime-widget-node.widget-switch .render-switch')?.getAttribute('aria-pressed'))
@@ -910,13 +983,13 @@ async function main() {
 
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-checkbox input[type="checkbox"]')?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => document.querySelector('.runtime-widget-node.widget-checkbox input[type="checkbox"]')?.checked), true, '杩愯鎬佸閫夋鐐瑰嚮娌℃湁閫変腑')
+    assert.equal(await inRenderer(() => document.querySelector('.runtime-widget-node.widget-checkbox input[type="checkbox"]')?.checked), true, '运行态复选框点击没有选中')
 
     const radioInputs = await inRenderer(() => Array.from(document.querySelectorAll('.runtime-widget-node.widget-radio input[type="radio"]')).map(node => node.value))
-    assert.ok(radioInputs.length >= 2, '杩愯鎬佸崟閫夋閫夐」涓嶈冻')
+    assert.ok(radioInputs.length >= 2, '运行态单选框选项不足')
     await inRenderer(() => document.querySelectorAll('.runtime-widget-node.widget-radio input[type="radio"]')[1]?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => Array.from(document.querySelectorAll('.runtime-widget-node.widget-radio input[type="radio"]')).filter(node => node.checked).length), 1, '杩愯鎬佸崟閫夋閫変腑鏁伴噺寮傚父')
+    assert.equal(await inRenderer(() => Array.from(document.querySelectorAll('.runtime-widget-node.widget-radio input[type="radio"]')).filter(node => node.checked).length), 1, '运行态单选框选中数量异常')
 
     await inRenderer(() => Array.from(document.querySelectorAll('.runtime-widget-node.widget-pagination .render-pagination button')).find(node => node.textContent?.trim() === '2')?.click())
     await sleep(40)
@@ -924,7 +997,7 @@ async function main() {
 
     await inRenderer(() => document.querySelectorAll('.runtime-widget-node.widget-tabs .render-tabs-head button')[1]?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => document.querySelectorAll('.runtime-widget-node.widget-tabs .render-tabs-head button.active')[0]?.textContent?.trim()), '\u8be6\u60c5', '杩愯鎬佹爣绛鹃〉鍒囨崲澶辫触')
+    assert.equal(await inRenderer(() => document.querySelectorAll('.runtime-widget-node.widget-tabs .render-tabs-head button.active')[0]?.textContent?.trim()), '\u8be6\u60c5', '运行态标签页切换失败')
 
     const collapseBefore = await inRenderer(() => document.querySelector('.runtime-widget-node.widget-collapse .render-collapse-head')?.getAttribute('aria-expanded'))
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-collapse .render-collapse-head')?.click())
@@ -941,15 +1014,15 @@ async function main() {
     await sleep(40)
     assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-alert .render-alert')).display), 'none', 'Alert remained visible after closing')
 
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-modal .render-modal')).display), 'flex', 'Modal 榛樿鏄剧ず澶辫触')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-modal .render-modal')).display), 'flex', 'Modal 默认显示失败')
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-modal .service-close')?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-modal .render-modal')).display), 'none', 'Modal 鍏抽棴鎸夐挳娌℃湁闅愯棌寮圭獥')
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-drawer .render-drawer')).display), 'block', 'Drawer 榛樿鏄剧ず澶辫触')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-modal .render-modal')).display), 'none', 'Modal 关闭按钮没有隐藏弹窗')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-drawer .render-drawer')).display), 'block', 'Drawer 默认显示失败')
     await inRenderer(() => document.querySelector('.runtime-widget-node.widget-drawer .service-close')?.click())
     await sleep(40)
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-drawer .render-drawer')).display), 'none', 'Drawer 鍏抽棴鎸夐挳娌℃湁闅愯棌鎶藉眽')
-    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-loading .render-loading')).display), 'flex', 'Loading 鐘舵€佹湭鏄剧ず')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-drawer .render-drawer')).display), 'none', 'Drawer 关闭按钮没有隐藏抽屉')
+    assert.equal(await inRenderer(() => getComputedStyle(document.querySelector('.runtime-widget-node.widget-loading .render-loading')).display), 'flex', 'Loading 状态未显示')
     assert.ok(await inRenderer(() => Boolean(document.querySelector('.runtime-widget-node.widget-loading .loading-spinner'))), 'loading spinner is missing')
     await closePreview()
   })
@@ -965,8 +1038,8 @@ async function main() {
       return { exists: Boolean(element), left: rect?.left, top: rect?.top, right: rect?.right, bottom: rect?.bottom, animated: rules.includes('.context-menu-enter-active') }
     })
     assert.equal(menu.exists, true)
-    assert.ok(menu.left >= 0 && menu.top >= 0 && menu.right <= 1440 && menu.bottom <= 1000, `鑿滃崟瓒婄晫锛?{JSON.stringify(menu)}`)
-    assert.equal(menu.animated, true, '鏈彂鐜拌彍鍗曡繘鍏?绂诲紑鍔ㄧ敾瑙勫垯')
+    assert.ok(menu.left >= 0 && menu.top >= 0 && menu.right <= 1440 && menu.bottom <= 1000, `右键菜单超出视口：${JSON.stringify(menu)}`)
+    assert.equal(menu.animated, true, '未发现菜单进入/离开动画规则')
     await inRenderer(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) )
     await waitForMenuClosed()
     assert.equal(await inRenderer(() => Boolean(document.querySelector('.canvas-context-menu'))), false)
@@ -1114,7 +1187,7 @@ async function main() {
       })
     }
     const containerId = containerInfo.id
-    assert.ok(containerId, `鏈壘鍒板彲绮樿创鐨勫鍣細${containerInfo.types.join(',')}`)
+    assert.ok(containerId, `未找到可粘贴的容器：${containerInfo.types.join(',')}`)
     await clickWidget(initialIds[2])
     await rightClickWidget(initialIds[2], 320, 270)
     await sleep(20)
@@ -1136,7 +1209,7 @@ async function main() {
     await inRenderer(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })))
     await sleep(50)
     const leftAfter = await inRenderer(id => parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.left), targetId)
-    assert.ok(leftAfter > leftBefore, `閿洏绉诲姩鏈敓鏁堬細${leftBefore} -> ${leftAfter}`)
+    assert.ok(leftAfter > leftBefore, `键盘移动未生效：${leftBefore} -> ${leftAfter}`)
 
     const widthBefore = await inRenderer(id => parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.width), targetId)
     await inRenderer(id => {
@@ -1148,7 +1221,7 @@ async function main() {
     }, targetId)
     await sleep(80)
     const widthAfter = await inRenderer(id => parseFloat(document.querySelector(`[data-widget-id="${id}"]`).style.width), targetId)
-    assert.ok(widthAfter >= widthBefore, `灏哄璋冩暣鏈敓鏁堬細${widthBefore} -> ${widthAfter}`)
+    assert.ok(widthAfter >= widthBefore, `尺寸调整未生效：${widthBefore} -> ${widthAfter}`)
 
     await rightClickWidget(targetId, 400, 300)
     await sleep(20)
@@ -1293,7 +1366,7 @@ async function main() {
   console.log('\nE2E results:')
   for (const result of results) console.log(`${result.status === 'passed' ? 'PASS' : 'FAIL'} | ${result.name}${result.error ? ` | ${result.error}` : ''}`)
   if (rendererErrors.length) {
-    console.error('\n娓叉煋鍣ㄩ敊璇細')
+    console.error('\n渲染器错误：')
     rendererErrors.forEach(error => console.error(error))
   }
   if (failed.length || rendererErrors.length) process.exitCode = 1

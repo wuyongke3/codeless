@@ -31,13 +31,6 @@ function projectVariant(index: number) {
     :aria-label="mode === 'home' ? '应用中心导航' : '工作区导航'"
   >
     <div class="route-navigation-main">
-      <button class="route-brand" type="button" aria-label="返回应用首页" @click="state.navigate('home')">
-        <span class="route-brand-mark"><img src="/logo.png" alt="" /></span>
-        <span class="route-brand-copy"><strong>Codeless</strong><small>Rapid Prototyper</small></span>
-      </button>
-
-      <span class="route-divider" aria-hidden="true"></span>
-
       <template v-if="mode === 'home'">
         <button class="route-home-link active" type="button" @click="state.navigate('home')">
           <AppIcon name="home" :size="17" />

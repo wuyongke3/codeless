@@ -17,7 +17,6 @@
 .route-local-status,
 .route-home-link,
 .route-tab,
-.route-brand,
 .route-create-button,
 .route-project-button,
 .route-more-projects {
@@ -25,30 +24,6 @@
   align-items: center;
 }
 .route-navigation-main { min-width: 0; gap: 10px; }
-.route-brand {
-  flex: 0 0 auto;
-  gap: 9px;
-  padding: 0;
-  color: var(--ink-secondary);
-  background: transparent;
-  text-align: left;
-}
-.route-brand:hover .route-brand-copy strong { color: var(--purple); }
-.route-brand-mark {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  overflow: hidden;
-  border-radius: 10px;
-  background: linear-gradient(145deg, #7b70ff, #5246e6);
-  box-shadow: 0 8px 20px #665cf638;
-}
-.route-brand-mark img { width: 100%; height: 100%; display: block; }
-.route-brand-copy { display: flex; flex-direction: column; gap: 1px; }
-.route-brand-copy strong { font-size: 15px; line-height: 17px; letter-spacing: -.3px; transition: color .18s; }
-.route-brand-copy small { color: #9498aa; font-size: 7px; letter-spacing: 1.15px; text-transform: uppercase; }
 .route-divider { width: 1px; height: 25px; flex: 0 0 auto; background: var(--line); }
 .route-divider-small { height: 20px; margin-inline: 1px; }
 .route-home-link {
@@ -158,7 +133,6 @@
 }
 
 @media (max-width: 900px) {
-  .route-brand-copy { display: none; }
   .route-navigation { padding-inline: 12px; }
   .route-navigation-meta { align-items: flex-start; }
   .route-navigation-status { gap: 0; }

@@ -2,7 +2,7 @@
   "name": "codeless",
   "version": "1.1.6-beta.1",
   "main": "dist-electron/main/index.js",
-  "description": "Codeless 鈥?local-first rapid prototyping tool powered by Electron, Vue and SQLite.",
+  "description": "Codeless - a local-first rapid prototyping tool powered by Electron, Vue and SQLite.",
   "author": "Codeless",
   "license": "MIT",
   "private": true,

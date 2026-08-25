@@ -12,6 +12,7 @@ type LayerRow = { widget: LowCodeWidget; depth: number }
 const props = defineProps<{
   widgets: LowCodeWidget[]
   state: DesignerState
+  rootDepth?: number
 }>()
 
 const viewportRef = ref<HTMLElement | null>(null)
@@ -40,7 +41,7 @@ const rows = computed<LayerRow[]>(() => {
   const result: LayerRow[] = []
   const visit = (parentId: string, depth: number) => {
     for (const widget of childrenByParent.value.get(parentId) || []) {
-      result.push({ widget, depth })
+      result.push({ widget, depth: depth + (props.rootDepth || 0) })
       if (isContainerType(widget.type) && expandedIds.value.has(widget.id)) visit(widget.id, depth + 1)
     }
   }

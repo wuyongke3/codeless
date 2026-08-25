@@ -101,7 +101,7 @@ export function useDesigner(
   const selectedWidgets = selection.selectedWidgets
   const selectedWidget = selection.selectedWidget
   const paletteSearch = ref('')
-  const paletteTab = ref<'components' | 'pages'>('components')
+  const paletteTab = ref<'components' | 'pages' | 'layers'>('components')
   const inspectorTab = ref<'properties' | 'events'>('properties')
   const zoom = ref(0.78)
   const dirty = ref(false)
@@ -1665,6 +1665,22 @@ export function useDesigner(
     markDirty()
   }
 
+  function toggleWidgetHidden(widgetId: string) {
+    const widget = widgetById(widgetId)
+    if (!widget) return
+    pushHistory()
+    setWidgetFrame(widget, { hidden: !getWidgetConfig(widget).layout.hidden })
+    markDirty()
+  }
+
+  function toggleWidgetLocked(widgetId: string) {
+    const widget = widgetById(widgetId)
+    if (!widget) return
+    pushHistory()
+    setWidgetFrame(widget, { locked: !getWidgetConfig(widget).layout.locked })
+    markDirty()
+  }
+
   function selectAllWidgets() {
     if (!currentProject.value?.layout.widgets.length) return
     selectedWidgetIds.value = currentProject.value.layout.widgets.map(widget => widget.id)
@@ -1789,7 +1805,7 @@ export function useDesigner(
     const widget = selectedWidget.value
     if (!project || !widget) return false
     if (getComponentLink(widget)?.role === 'definition') {
-      notify('??????????', 'info')
+      notify('当前选中的是组件定义，无需重复创建。', 'info')
       return false
     }
     pushHistory()
@@ -1797,11 +1813,11 @@ export function useDesigner(
       ? migrateLegacyVariantsToComponent(project, widget)
       : createComponentDefinition(project, widget)
     if (!definition) {
-      notify('?????????? legacy ??', 'info')
+      notify('未能根据当前组件创建组件定义。', 'info')
       return false
     }
     markDirty()
-    notify('???????' + definition.name + '?')
+    notify('已创建组件：' + definition.name)
     return true
   }
 
@@ -1811,7 +1827,7 @@ export function useDesigner(
     if (!project || !widget) return false
     const link = getComponentLink(widget)
     if (!link) {
-      notify('???????????', 'info')
+      notify('请先选中一个已关联的组件定义。', 'info')
       return false
     }
     pushHistory()
@@ -1819,7 +1835,7 @@ export function useDesigner(
     if (!instance) return false
     selectWidget(instance.id)
     markDirty()
-    notify('????' + instance.name + '???')
+    notify('已创建 ' + instance.name + ' 的实例')
     return true
   }
 
@@ -1830,7 +1846,7 @@ export function useDesigner(
     pushHistory()
     if (!refreshComponentInstance(project, widget, mode)) return false
     markDirty()
-    notify(mode === 'reset-overrides' ? '?????????????' : '?????????????')
+    notify(mode === 'reset-overrides' ? '已重置局部覆盖并同步组件最新变更。' : '已保留局部覆盖并同步组件最新变更。')
     return true
   }
 
@@ -1840,7 +1856,7 @@ export function useDesigner(
     pushHistory()
     if (!detachComponentInstance(widget)) return false
     markDirty()
-    notify('????????????')
+    notify('已解除组件实例关联。')
     return true
   }
 
@@ -2171,7 +2187,7 @@ export function useDesigner(
     startPanelResize, startCanvasSelection, handleCanvasClick, insertWidgets, handleCanvasPanPointerDown, handleCanvasPanPointerMove, handleCanvasPanPointerUp, handleCanvasPanPointerCancel, handleCanvasViewportKeydown, handleCanvasViewportKeyup,
     startWidgetMove, startWidgetResize, removeSelectedWidget, duplicateSelectedWidget, copySelectedWidgets, cutSelectedWidgets, pasteWidgets, renameSelectedWidget, selectAllWidgets, bringToFront, sendToBack, moveSelectedLayer, canMoveSelectedLayer,
     alignSelectedWidgets, distributeSelectedWidgets, toggleCanvasGrid, toggleCanvasSnap,
-    toggleSelectedLocked, toggleSelectedHidden, createSelectedComponentDefinition, createSelectedComponentInstance, refreshSelectedComponentInstance, detachSelectedComponentInstance, syncWidget, updateWidgetVariant, updateWidgetTokenRef, updateDataSource, updateSubmitTarget, updateColumns, updateOptions, serializeWidgetColumns, serializeWidgetOptions, widgetStyle, resetDesigner,
+    toggleSelectedLocked, toggleSelectedHidden, toggleWidgetLocked, toggleWidgetHidden, createSelectedComponentDefinition, createSelectedComponentInstance, refreshSelectedComponentInstance, detachSelectedComponentInstance, syncWidget, updateWidgetVariant, updateWidgetTokenRef, updateDataSource, updateSubmitTarget, updateColumns, updateOptions, serializeWidgetColumns, serializeWidgetOptions, widgetStyle, resetDesigner,
     addWidgetEvent, removeWidgetEvent, addEventAction, removeEventAction,
   }
 }

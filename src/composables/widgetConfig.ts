@@ -39,6 +39,10 @@ const buttonVariants: NonNullable<WidgetConfig['variants']> = {
 }
 
 const componentDefaults: Partial<Record<WidgetType, { content?: WidgetConfig['content']; style?: WidgetConfig['style'] }>> = {
+  button: { content: { text: '提交', variant: 'primary', disabled: false, loading: false }, style: { accent: '#665cf6', borderRadius: 10 } },
+  input: { content: { label: '输入内容', placeholder: '请输入内容', valueType: 'text', defaultValue: '', disabled: false, readOnly: false }, style: { borderRadius: 9 } },
+  select: { content: { label: '选择项目', placeholder: '请选择', defaultValue: '', disabled: false, options: [{ label: '选项一', value: 'option-1' }, { label: '选项二', value: 'option-2' }] }, style: { borderRadius: 9 } },
+  table: { content: { columns: [{ key: 'name', label: '名称', width: 180 }, { key: 'owner', label: '负责人' }, { key: 'status', label: '状态' }, { key: 'updatedAt', label: '更新时间' }], emptyText: '暂无数据', showIndex: false }, style: { accent: '#665cf6', borderRadius: 12 } },
   badge: { content: { text: '8', value: '8', max: 99, showZero: true }, style: { accent: '#f56c6c', borderRadius: 999 } },
   tag: { content: { text: '标签', tone: 'primary', closable: false }, style: { accent: '#665cf6', borderRadius: 6 } },
   alert: { content: { title: '提示信息', description: '这里是一段需要关注的说明文字。', tone: 'info', closable: false }, style: { accent: '#409eff', borderRadius: 8 } },
@@ -285,8 +289,8 @@ export function normalizeProject(project: LowCodeProject): LowCodeProject {
 }
 
 /**
- * @deprecated WidgetConfig v1 ?????????????????????????
- * ????? config ???? legacy x/y/w/h/props??????? legacy ???????
+ * @deprecated WidgetConfig v1 是唯一的组件配置来源；请使用它代替旧版 props。
+ * 旧版 config 会映射到 legacy 的 x/y/w/h/props，供历史数据兼容使用。
  */
 export function syncLegacyProps(widget: LowCodeWidget) {
   if (!hasWidgetConfigShape(widget.config)) normalizeWidget(widget)

@@ -7,8 +7,9 @@ import { parseCodelessDocument, serializeCodelessDocument } from '../types/proje
 import { parseDesignExchangeDocument, serializeDesignExchangeDocument } from '../types/designExchange'
 
 /**
- * 娴忚鍣ㄩ檷绾фā寮忕殑鏁版嵁閫傞厤鍣ㄣ€? *
- * Electron 妯″紡浣跨敤 SQLite锛涘綋搴旂敤閫氳繃 Vite 鐩存帴鎵撳紑鎴栬繍琛屽湪涓嶅甫 preload 鐨? * 娴忚鍣ㄤ腑鏃讹紝浠嶇劧闇€瑕佷竴濂楄涓轰竴鑷寸殑 CRUD / 鏌ヨ鑳藉姏锛屽惁鍒欑粍浠剁殑鏁版嵁缁戝畾鍜? * 鏁版嵁妯″瀷椤典細閫€鍖栨垚鈥滃彧鑳界湅銆佷笉鑳界敤鈥濄€傝繖閲屾晠鎰忓彧瀹炵幇鍙楅檺鐨勬煡璇㈣娉曪紝閬垮厤鎶? * 浠绘剰 SQL 鏆撮湶缁欐祻瑙堝櫒杩愯鏃躲€? */
+ * 浏览器端降级模式的数据访问层。
+ * Electron 模式使用 SQLite；当应用通过 Vite 直接打开或运行在不带 preload 的浏览器环境时，仍提供行为一致的 CRUD / 查询能力。为避免任意执行 SQL 带来的安全风险，这里仅实现受限的查询语法。
+ */
 
 export interface BrowserDataApi {
   listTables: () => Promise<TableMeta[]>
@@ -48,7 +49,11 @@ function browserPlugins(): InstalledPlugin[] {
 }
 
 function saveBrowserPlugins(plugins: InstalledPlugin[]) {
-  try { localStorage.setItem(PLUGIN_STORAGE_KEY, JSON.stringify(plugins)) } catch { /* 浏览器隐私模式下保持内存回退 */ }
+  try {
+    localStorage.setItem(PLUGIN_STORAGE_KEY, JSON.stringify(plugins))
+  } catch {
+    // 浏览器隐私模式下保持内存回退
+  }
 }
 
 function browserPluginFile(): Promise<File | null> {
@@ -93,60 +98,60 @@ function field(name: string, type: string, description: string, options: Partial
 
 const TABLE_DEFINITIONS: Record<string, Omit<BrowserTableDefinition, 'rows'>> = {
   customers: {
-    title: '瀹㈡埛',
+    title: '客户',
     color: '#665cf6',
     fields: [
-      field('id', 'INTEGER', '涓婚敭锛岃嚜澧?', { isPrimaryKey: true, isNotNull: true }),
-      field('name', 'TEXT', '瀹㈡埛鍚嶇О', { isNotNull: true }),
-      field('contact', 'TEXT', '鑱旂郴浜?'),
-      field('phone', 'TEXT', '鑱旂郴鐢佃瘽'),
-      field('status', 'TEXT', '瀹㈡埛鐘舵€?'),
-      field('owner', 'TEXT', '璐熻矗浜?'),
-      field('created_at', 'DATETIME', '鍒涘缓鏃堕棿'),
+      field('id', 'INTEGER', '唯一标识', { isPrimaryKey: true, isNotNull: true }),
+      field('name', 'TEXT', '客户名称', { isNotNull: true }),
+      field('contact', 'TEXT', '联系人'),
+      field('phone', 'TEXT', '联系电话'),
+      field('status', 'TEXT', '客户状态'),
+      field('owner', 'TEXT', '负责人'),
+      field('created_at', 'DATETIME', '创建时间'),
     ],
   },
   orders: {
-    title: '璁㈠崟',
+    title: '订单',
     color: '#20b486',
     fields: [
-      field('id', 'INTEGER', '涓婚敭锛岃嚜澧?', { isPrimaryKey: true, isNotNull: true }),
-      field('order_no', 'TEXT', '璁㈠崟缂栧彿', { isNotNull: true }),
-      field('customer_id', 'INTEGER', '鍏宠仈瀹㈡埛'),
-      field('amount', 'REAL', '璁㈠崟閲戦'),
-      field('status', 'TEXT', '璁㈠崟鐘舵€?'),
-      field('created_at', 'DATETIME', '鍒涘缓鏃堕棿'),
+      field('id', 'INTEGER', '唯一标识', { isPrimaryKey: true, isNotNull: true }),
+      field('order_no', 'TEXT', '订单编号', { isNotNull: true }),
+      field('customer_id', 'INTEGER', '关联客户'),
+      field('amount', 'REAL', '订单金额'),
+      field('status', 'TEXT', '订单状态'),
+      field('created_at', 'DATETIME', '创建时间'),
     ],
   },
   tickets: {
-    title: '鍞悗宸ュ崟',
+    title: '售后工单',
     color: '#f59e0b',
     fields: [
-      field('id', 'INTEGER', '涓婚敭锛岃嚜澧?', { isPrimaryKey: true, isNotNull: true }),
-      field('title', 'TEXT', '宸ュ崟鏍囬', { isNotNull: true }),
-      field('priority', 'TEXT', '浼樺厛绾?'),
-      field('assignee', 'TEXT', '澶勭悊浜?'),
-      field('status', 'TEXT', '澶勭悊鐘舵€?'),
-      field('updated_at', 'DATETIME', '鏇存柊鏃堕棿'),
+      field('id', 'INTEGER', '唯一标识', { isPrimaryKey: true, isNotNull: true }),
+      field('title', 'TEXT', '工单标题', { isNotNull: true }),
+      field('priority', 'TEXT', '优先级'),
+      field('assignee', 'TEXT', '处理人'),
+      field('status', 'TEXT', '处理状态'),
+      field('updated_at', 'DATETIME', '更新时间'),
     ],
   },
 }
 
 const SEED_ROWS: Record<string, Record<string, unknown>[]> = {
   customers: [
-    { id: 1, name: '鏄熸渤绉戞妧', contact: '闄堟櫒', phone: '138****1201', status: '宸叉垚浜?', owner: '鏋楁檽', created_at: '2026-08-18 09:20:00' },
-    { id: 2, name: '浜戝竼缃戠粶', contact: '鏉庢兂', phone: '139****2816', status: '璺熻繘涓?', owner: '鍛ㄨ埅', created_at: '2026-08-19 14:05:00' },
-    { id: 3, name: '鍖楄景璐告槗', contact: '鐜嬫', phone: '136****8302', status: '宸叉垚浜?', owner: '鏋楁檽', created_at: '2026-08-20 10:32:00' },
-    { id: 4, name: '鍘熼噹璁捐', contact: '璧垫櫞', phone: '135****6118', status: '寰呰仈绯?', owner: '璁歌█', created_at: '2026-08-21 08:48:00' },
+    { id: 1, name: '星河科技', contact: '陈晨', phone: '138****1201', status: '已成交', owner: '林晓', created_at: '2026-08-18 09:20:00' },
+    { id: 2, name: '云帆网络', contact: '李想', phone: '139****2816', status: '跟进中', owner: '周航', created_at: '2026-08-19 14:05:00' },
+    { id: 3, name: '北辰贸易', contact: '王楠', phone: '136****8302', status: '已成交', owner: '林晓', created_at: '2026-08-20 10:32:00' },
+    { id: 4, name: '原野设计', contact: '赵晴', phone: '135****6118', status: '待联系', owner: '许言', created_at: '2026-08-21 08:48:00' },
   ],
   orders: [
-    { id: 1, order_no: 'SO-20260818-001', customer_id: 1, amount: 12800, status: '宸插畬鎴?', created_at: '2026-08-18 10:10:00' },
-    { id: 2, order_no: 'SO-20260819-002', customer_id: 2, amount: 7600, status: '澶勭悊涓?', created_at: '2026-08-19 15:30:00' },
-    { id: 3, order_no: 'SO-20260820-003', customer_id: 3, amount: 23500, status: '寰呬粯娆?', created_at: '2026-08-20 11:15:00' },
+    { id: 1, order_no: 'SO-20260818-001', customer_id: 1, amount: 12800, status: '已完成', created_at: '2026-08-18 10:10:00' },
+    { id: 2, order_no: 'SO-20260819-002', customer_id: 2, amount: 7600, status: '处理中', created_at: '2026-08-19 15:30:00' },
+    { id: 3, order_no: 'SO-20260820-003', customer_id: 3, amount: 23500, status: '待付款', created_at: '2026-08-20 11:15:00' },
   ],
   tickets: [
-    { id: 1, title: '鍙戠エ淇℃伅闇€瑕佷慨鏀?', priority: '鏅€?', assignee: '璁歌█', status: '澶勭悊涓?', updated_at: '2026-08-20 16:20:00' },
-    { id: 2, title: '璁㈠崟鍒拌揣鏁伴噺寮傚父', priority: '绱ф€?', assignee: '鍛ㄨ埅', status: '寰呭鐞?', updated_at: '2026-08-21 09:05:00' },
-    { id: 3, title: '鐢宠琛ュ厖浜у搧璇存槑', priority: '浣?', assignee: '鏋楁檽', status: '宸茶В鍐?', updated_at: '2026-08-21 10:40:00' },
+    { id: 1, title: '发票信息需要修正', priority: '普通', assignee: '许言', status: '处理中', updated_at: '2026-08-20 16:20:00' },
+    { id: 2, title: '订单到货数量异常', priority: '紧急', assignee: '周航', status: '待处理', updated_at: '2026-08-21 09:05:00' },
+    { id: 3, title: '申请补充产品说明', priority: '低', assignee: '林晓', status: '已解决', updated_at: '2026-08-21 10:40:00' },
   ],
 }
 
@@ -166,7 +171,7 @@ function readStore(): StoredData {
       }
     }
   } catch {
-    // localStorage 鍙兘琚殣绉佹ā寮忔垨娴忚鍣ㄥ畨鍏ㄧ瓥鐣ョ鐢紝閫€鍥炲唴瀛樺瓨鍌ㄥ嵆鍙€?
+    // localStorage 可能被隐私模式或浏览器安全策略禁用，降级为内存存储即可。
     }
   memoryStore = {
     version: 1,
@@ -181,12 +186,12 @@ function writeStore() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryStore))
   } catch {
-    // 鍐欏叆澶辫触涓嶅奖鍝嶅綋鍓嶉〉闈㈢户缁娇鐢ㄥ唴瀛樻暟鎹€?
+    // 写入失败不影响当前页面继续使用内存数据。
     }
 }
 
 function assertTable(tableName: string) {
-  if (!TABLE_DEFINITIONS[tableName]) throw new Error(`鏁版嵁琛ㄤ笉瀛樺湪锛?{tableName}`)
+  if (!TABLE_DEFINITIONS[tableName]) throw new Error(`数据表不存在：${tableName}`)
   return tableName
 }
 
@@ -243,7 +248,7 @@ function applyWhere(source: Record<string, unknown>[], tableName: string, where?
   const expressions = where.split(/\s+AND\s+/i).map(item => item.trim()).filter(Boolean)
   const predicates = expressions.map(expression => {
     const match = expression.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(LIKE|!=|<>|>=|<=|=|>|<)\s*(.+)$/i)
-    if (!match || !names.has(match[1])) throw new Error(`杩囨护鏉′欢涓嶆敮鎸侊細${expression}`)
+    if (!match || !names.has(match[1])) throw new Error(`暂不支持该查询表达式：${expression}`)
     return { field: match[1], operator: match[2].toUpperCase(), value: parseLiteral(match[3]) }
   })
   return source.filter(row => predicates.every(item => compare(row[item.field], item.operator, item.value)))
@@ -252,7 +257,7 @@ function applyWhere(source: Record<string, unknown>[], tableName: string, where?
 function applyOrder(source: Record<string, unknown>[], tableName: string, orderBy?: string) {
   if (!orderBy?.trim()) return source
   const match = orderBy.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)(?:\s+(ASC|DESC))?$/i)
-  if (!match || !fieldNames(tableName).has(match[1])) throw new Error(`鎺掑簭瀛楁涓嶆敮鎸侊細${orderBy}`)
+  if (!match || !fieldNames(tableName).has(match[1])) throw new Error(`排序字段不存在：${orderBy}`)
   const direction = (match[2] || 'ASC').toUpperCase() === 'DESC' ? -1 : 1
   return [...source].sort((left, right) => {
     const a = left[match[1]]
@@ -279,7 +284,7 @@ function queryRows(tableName: string, options: DataQueryOptions = {}): QueryResu
     const aggregate = options.aggregate?.function || 'count'
     if (aggregate === 'count') return { columns: ['value'], rows: [{ value: total }], total }
     const aggregateField = options.aggregate?.field
-    if (!aggregateField || !fieldNames(table).has(aggregateField)) throw new Error(`鑱氬悎瀛楁涓嶅瓨鍦細${aggregateField || ''}`)
+    if (!aggregateField || !fieldNames(table).has(aggregateField)) throw new Error(`聚合字段不存在：${aggregateField || ''}`)
     const numbers = source.map(row => Number(row[aggregateField])).filter(value => Number.isFinite(value))
     const value = aggregate === 'sum'
       ? numbers.reduce((sum, current) => sum + current, 0)
@@ -300,10 +305,10 @@ function writableData(tableName: string, data: Record<string, unknown>) {
   const allowed = new Set(fields.map(item => item.name))
   const primaryKeys = new Set(fields.filter(item => item.isPrimaryKey).map(item => item.name))
   const entries = Object.entries(data || {}).filter(([key, value]) => {
-    if (!allowed.has(key)) throw new Error(`鍐欏叆瀛楁涓嶅瓨鍦細${key}`)
+    if (!allowed.has(key)) throw new Error(`写入字段不存在：${key}`)
     return !primaryKeys.has(key) && value !== undefined
   })
-  if (!entries.length) throw new Error('娌℃湁鍙啓鍏ョ殑鏁版嵁')
+  if (!entries.length) throw new Error('没有可写入的数据')
   return entries
 }
 
@@ -336,7 +341,7 @@ export const browserDataApi: BrowserDataApi = {
   async updateRow(input) {
     const rows = rowsFor(input.table)
     const target = rows.find(row => String(row.id) === String(input.id))
-    if (!target) throw new Error('鏈壘鍒板緟鏇存柊璁板綍')
+    if (!target) throw new Error('未找到待更新记录')
     writableData(input.table, input.data).forEach(([key, value]) => { target[key] = value })
     writeStore()
     return { success: true }
@@ -344,7 +349,7 @@ export const browserDataApi: BrowserDataApi = {
   async deleteRow(table, id) {
     const rows = rowsFor(table)
     const index = rows.findIndex(row => String(row.id) === String(id))
-    if (index < 0) throw new Error('鏈壘鍒板緟鍒犻櫎璁板綍')
+    if (index < 0) throw new Error('未找到待删除记录')
     rows.splice(index, 1)
     writeStore()
     return { success: true }
@@ -374,21 +379,21 @@ function writeBrowserProjects(projects: LowCodeProject[]) {
   try {
     if (typeof localStorage !== 'undefined') localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(memoryProjects))
   } catch {
-    // 娴忚鍣ㄥ瓨鍌ㄤ笉鍙敤鏃朵粛淇濈暀褰撳墠浼氳瘽鍐呯殑杩愯鑳藉姏銆?
+    // 浏览器端存储失败时，保留当前会话内的内存数据。
     }
 }
 
 function browserBootstrap(): BootstrapData {
   const projects = readBrowserProjects()
-  if (projects.length) return { projects, activities: [], databasePath: '娴忚鍣ㄦ紨绀烘ā寮?路 localStorage' }
+  if (projects.length) return { projects, activities: [], databasePath: '浏览器演示模式 · localStorage' }
   const fallback = fallbackBootstrap()
   const normalized = fallback.projects.map(normalizeProject)
   writeBrowserProjects(normalized)
-  return { ...fallback, projects: normalized, databasePath: '娴忚鍣ㄦ紨绀烘ā寮?路 localStorage' }
+  return { ...fallback, projects: normalized, databasePath: '浏览器演示模式 · localStorage' }
 }
 
 export function browserSaveProject(project: LowCodeProject) {
-  if (!project?.id || !project?.name || !project?.layout) throw new Error('搴旂敤鏁版嵁涓嶅畬鏁?')
+  if (!project?.id || !project?.name || !project?.layout) throw new Error('应用数据不完整')
   const projects = readBrowserProjects()
   const normalized = normalizeProject(clone(project))
   const index = projects.findIndex(item => item.id === normalized.id)
@@ -416,7 +421,7 @@ export async function browserExportProject(project: LowCodeProject): Promise<Pro
 }
 
 export async function browserExportDesignExchange(documentFile: DesignExchangeDocument): Promise<DesignExchangeExportResult> {
-  if (typeof document === 'undefined') throw new Error('???????????????')
+  if (typeof document === 'undefined') throw new Error('当前环境不支持导出设计交换文件')
   const safeName = documentFile.name.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').replace(/[. ]+$/g, '') || 'codeless-design'
   const content = serializeDesignExchangeDocument(documentFile)
   const blob = new Blob([content], { type: 'application/json;charset=utf-8' })
@@ -433,7 +438,7 @@ export async function browserExportDesignExchange(documentFile: DesignExchangeDo
 }
 
 export async function browserImportDesignExchange(): Promise<DesignExchangeImportResult> {
-  if (typeof document === 'undefined') throw new Error('?????????????????')
+  if (typeof document === 'undefined') throw new Error('当前环境不支持导出设计交换文件??')
   return new Promise((resolve, reject) => {
     const input = document.createElement('input')
     let settled = false
@@ -458,7 +463,7 @@ export async function browserImportDesignExchange(): Promise<DesignExchangeImpor
       }
       if (file.size > 25 * 1024 * 1024) {
         cleanup()
-        reject(new Error('???????? 25 MB??????'))
+        reject(new Error('设计交换文件不能超过 25 MB'))
         return
       }
       try {
@@ -606,12 +611,12 @@ export async function browserImportProject(): Promise<ProjectFileImportResult> {
 
 function browserDuplicateProject(projectId: string) {
   const source = readBrowserProjects().find(project => project.id === projectId)
-  if (!source) throw new Error('搴旂敤涓嶅瓨鍦?')
+  if (!source) throw new Error('应用不存在')
   const createdAt = new Date().toISOString()
   const copy = normalizeProject({
     ...clone(source),
     id: makeId('project'),
-    name: `${source.name} 鍓湰`,
+    name: `${source.name} 副本`,
     status: 'draft',
     createdAt,
     updatedAt: createdAt,
@@ -624,7 +629,7 @@ function browserDuplicateProject(projectId: string) {
 
 function browserDeleteProject(projectId: string) {
   const projects = readBrowserProjects()
-  if (!projects.some(project => project.id === projectId)) throw new Error('搴旂敤涓嶅瓨鍦?')
+  if (!projects.some(project => project.id === projectId)) throw new Error('应用不存在')
   writeBrowserProjects(projects.filter(project => project.id !== projectId))
   return { success: true }
 }

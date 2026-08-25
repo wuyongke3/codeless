@@ -124,6 +124,9 @@ const displayColumns = computed<WidgetColumn[]>(() => {
   if (config.value.content.columns?.length) return config.value.content.columns.filter(column => column.visible !== false)
   return runtimeColumns.value.map(column => ({ key: column, label: column }))
 })
+const tableDisplayColumns = computed<WidgetColumn[]>(() => config.value.content.showIndex
+  ? [{ key: '__index', label: '#', width: 52, align: 'center' }, ...displayColumns.value]
+  : displayColumns.value)
 const staticOptions = computed(() => config.value.content.options || [])
 const pageCount = computed(() => Math.max(1, Math.ceil((Number(config.value.content.total) || 0) / Math.max(1, Number(config.value.content.pageSize) || 10))))
 const paginationPages = computed(() => {
@@ -204,6 +207,7 @@ function formatValue(value: unknown) {
 }
 
 function rowValue(row: Record<string, unknown>, column: WidgetColumn, index: number) {
+  if (column.key === '__index') return index + 1
   const key = column.key || config.value.data.fields?.[String(index)] || runtimeColumns.value[index]
   return row[key] ?? ''
 }
@@ -227,7 +231,7 @@ function cellStyle(column: WidgetColumn) {
 
 function tableGridStyle() {
   return {
-    gridTemplateColumns: displayColumns.value.map(column => column.width ? `${column.width}px` : 'minmax(100px, 1fr)').join(' '),
+    gridTemplateColumns: tableDisplayColumns.value.map(column => column.width ? `${column.width}px` : 'minmax(100px, 1fr)').join(' '),
   }
 }
 
@@ -344,7 +348,7 @@ function handleRowClick(row: Record<string, unknown>, index: number) {
 }
 
 async function handleButtonClick() {
-  if (!props.runtime) return
+  if (!props.runtime || config.value.content.disabled || config.value.content.loading) return
   await emitEvent('click')
   await emitEvent('submit', { value: String(inputValue.value || '') })
 }
@@ -394,10 +398,10 @@ function containerStyle() {
 
   </div>
   <p v-else-if="widget.type === 'text'" class="render-text" :style="{ textAlign: config.style.textAlign, fontSize: `${config.style.fontSize || 14}px`, color: config.style.color || config.style.accent || '#62677a', opacity: config.style.opacity }" @click="handleClick">{{ config.content.text }}</p>
-  <button v-else-if="widget.type === 'button'" :class="['render-button', config.content.variant || 'primary']" :style="{ '--accent': config.style.accent || '#665cf6', background: config.style.background || undefined, borderColor: config.style.borderColor || undefined, borderRadius: `${config.style.borderRadius || 10}px`, opacity: config.style.opacity }" @click="handleButtonClick">{{ config.content.text }}</button>
+  <button v-else-if="widget.type === 'button'" :class="['render-button', config.content.variant || 'primary', { 'is-loading': config.content.loading }]" :style="{ '--accent': config.style.accent || '#665cf6', background: config.style.background || undefined, borderColor: config.style.borderColor || undefined, borderRadius: `${config.style.borderRadius || 10}px`, opacity: config.style.opacity }" :disabled="!runtime || config.content.disabled || config.content.loading" @click="handleButtonClick"><span v-if="config.content.loading" class="render-button-spinner"></span>{{ config.content.loading ? '加载中…' : config.content.text }}</button>
   <label v-else-if="widget.type === 'input'" class="render-field">
     <span>{{ config.content.label || config.content.text }} <i v-if="config.validation.required">*</i></span>
-    <div :style="{ borderRadius: `${config.style.borderRadius || 9}px` }"><AppIcon name="input" :size="15" /><input v-model="inputValue" :type="config.content.valueType === 'email' ? 'email' : config.content.valueType === 'phone' ? 'tel' : config.content.valueType === 'number' ? 'number' : config.content.valueType === 'date' ? 'date' : config.content.valueType === 'datetime' ? 'datetime-local' : 'text'" :placeholder="config.content.placeholder" :required="config.validation.required" :disabled="!runtime" :minlength="config.validation.minLength" :maxlength="config.validation.maxLength" :min="config.validation.min" :max="config.validation.max" :pattern="config.validation.pattern" @input="handleValueInput" @change="handleValueChange" /></div>
+    <div :style="{ borderRadius: `${config.style.borderRadius || 9}px` }"><AppIcon name="input" :size="15" /><input v-model="inputValue" :type="config.content.valueType === 'email' ? 'email' : config.content.valueType === 'phone' ? 'tel' : config.content.valueType === 'number' ? 'number' : config.content.valueType === 'date' ? 'date' : config.content.valueType === 'datetime' ? 'datetime-local' : 'text'" :placeholder="config.content.placeholder" :required="config.validation.required" :disabled="!runtime || config.content.disabled" :readonly="config.content.readOnly" :minlength="config.validation.minLength" :maxlength="config.validation.maxLength" :min="config.validation.min" :max="config.validation.max" :pattern="config.validation.pattern" @input="handleValueInput" @change="handleValueChange" /></div>
   </label>
   <label v-else-if="widget.type === 'select'" class="render-field">
     <span>{{ config.content.label || config.content.text }} <i v-if="config.validation.required">*</i></span>
@@ -428,18 +432,18 @@ function containerStyle() {
     <div class="render-progress-head"><span v-if="config.content.text">{{ config.content.text }}</span><strong v-if="config.content.showText !== false">{{ progressPercent() }}%</strong></div><div class="render-progress-track"><i :class="`status-${config.content.status || 'normal'}`" :style="{ width: `${progressPercent()}%` }"></i></div>
   </div>
   <label v-else-if="widget.type === 'switch'" class="render-switch-field" @click.stop>
-    <span>{{ config.content.label || config.content.text }}</span><button type="button" :class="['render-switch', { checked: inputValue === 'true' }]" :aria-pressed="inputValue === 'true'" :disabled="!runtime" @click="handleBooleanChange(inputValue !== 'true')"><i></i></button><small>{{ inputValue === 'true' ? config.content.activeText : config.content.inactiveText }}</small>
+    <span>{{ config.content.label || config.content.text }}</span><button type="button" :class="['render-switch', { checked: inputValue === 'true' }]" :aria-pressed="inputValue === 'true'" :disabled="!runtime || config.content.disabled" @click="handleBooleanChange(inputValue !== 'true')"><i></i></button><small>{{ inputValue === 'true' ? config.content.activeText : config.content.inactiveText }}</small>
   </label>
   <fieldset v-else-if="widget.type === 'checkbox'" class="render-choice-field" @click.stop>
     <legend>{{ config.content.label || config.content.text }}</legend>
-    <template v-if="config.content.options?.length"><label v-for="option in config.content.options" :key="option.value" class="render-choice"><input type="checkbox" :checked="checkboxValues().includes(option.value)" :disabled="!runtime || option.disabled" @change="handleCheckboxChange(option.value, ($event.target as HTMLInputElement).checked)" /><span>{{ option.label }}</span></label></template>
-    <label v-else class="render-choice"><input type="checkbox" :checked="inputValue === 'true'" :disabled="!runtime" @change="handleBooleanChange(($event.target as HTMLInputElement).checked)" /><span>{{ config.content.label || config.content.text }}</span></label>
+    <template v-if="config.content.options?.length"><label v-for="option in config.content.options" :key="option.value" class="render-choice"><input type="checkbox" :checked="checkboxValues().includes(option.value)" :disabled="!runtime || config.content.disabled || option.disabled" @change="handleCheckboxChange(option.value, ($event.target as HTMLInputElement).checked)" /><span>{{ option.label }}</span></label></template>
+    <label v-else class="render-choice"><input type="checkbox" :checked="inputValue === 'true'" :disabled="!runtime || config.content.disabled" @change="handleBooleanChange(($event.target as HTMLInputElement).checked)" /><span>{{ config.content.label || config.content.text }}</span></label>
   </fieldset>
   <fieldset v-else-if="widget.type === 'radio'" class="render-choice-field" @click.stop>
-    <legend>{{ config.content.label || config.content.text }}</legend><label v-for="option in config.content.options" :key="option.value" class="render-choice"><input type="radio" :name="widget.id" :value="option.value" :checked="inputValue === option.value" :disabled="!runtime || option.disabled" @change="handleRadioChange(option.value)" /><span>{{ option.label }}</span></label>
+    <legend>{{ config.content.label || config.content.text }}</legend><label v-for="option in config.content.options" :key="option.value" class="render-choice"><input type="radio" :name="widget.id" :value="option.value" :checked="inputValue === option.value" :disabled="!runtime || config.content.disabled || option.disabled" @change="handleRadioChange(option.value)" /><span>{{ option.label }}</span></label>
   </fieldset>
   <label v-else-if="widget.type === 'datePicker'" class="render-field">
-    <span>{{ config.content.label || config.content.text }} <i v-if="config.validation.required">*</i></span><div :style="{ borderRadius: `${config.style.borderRadius || 9}px` }"><AppIcon name="calendar" :size="15" /><input v-model="inputValue" :type="config.content.valueType === 'datetime' ? 'datetime-local' : 'date'" :placeholder="config.content.placeholder" :required="config.validation.required" :disabled="!runtime" @input="handleValueInput" @change="handleValueChange" /></div>
+    <span>{{ config.content.label || config.content.text }} <i v-if="config.validation.required">*</i></span><div :style="{ borderRadius: `${config.style.borderRadius || 9}px` }"><AppIcon name="calendar" :size="15" /><input v-model="inputValue" :type="config.content.valueType === 'datetime' ? 'datetime-local' : 'date'" :placeholder="config.content.placeholder" :required="config.validation.required" :disabled="!runtime || config.content.disabled" @input="handleValueInput" @change="handleValueChange" /></div>
   </label>
   <div v-else-if="widget.type === 'pagination'" class="render-pagination" :style="{ '--accent': config.style.accent || '#665cf6', opacity: config.style.opacity }" @click="handleClick">
     <button type="button" :disabled="!runtime || paginationPage <= 1" @click.stop="handlePageChange(paginationPage - 1)"><AppIcon name="chevron-right" :size="13" style="transform:rotate(180deg)" /></button><button v-for="page in paginationPages" :key="page" type="button" :class="{ active: page === paginationPage }" :disabled="!runtime" @click.stop="handlePageChange(page)">{{ page }}</button><button type="button" :disabled="!runtime || paginationPage >= pageCount" @click.stop="handlePageChange(paginationPage + 1)"><AppIcon name="chevron-right" :size="13" /></button>
@@ -462,22 +466,24 @@ function containerStyle() {
     <p><b :class="{ negative: config.content.trend?.startsWith('-') }">{{ config.content.trend }}</b><span v-if="config.content.trend">较上月</span><small v-if="runtimeLoading">正在更新…</small><small v-else-if="runtimeError">{{ runtimeError }}</small></p>
   </div>
   <div v-else-if="widget.type === 'table'" class="render-table" :style="{ borderRadius: `${config.style.borderRadius || 12}px`, opacity: config.style.opacity }" @click="handleClick">
-    <div class="render-table-head" :style="tableGridStyle()"><span v-for="column in displayColumns" :key="column.key" :style="cellStyle(column)">{{ column.label }}</span></div>
+    <div class="render-table-head" :style="tableGridStyle()"><span v-for="column in tableDisplayColumns" :key="column.key" :style="cellStyle(column)">{{ column.label }}</span></div>
     <template v-if="runtime && dataBindingEnabled">
       <div v-if="runtimeLoading" class="table-empty"><AppIcon name="database" :size="18" /><span>正在加载数据…</span></div>
       <div v-else-if="runtimeError" class="table-empty error"><AppIcon name="close" :size="18" /><span>{{ runtimeError }}</span></div>
       <div v-else-if="!runtimeRows.length" class="table-empty"><AppIcon name="database" :size="18" /><span>暂无数据</span></div>
       <div v-else v-for="(row, ri) in runtimeRows" :key="ri" class="render-table-row" :style="tableGridStyle()" @click.stop="handleRowClick(row, ri)">
-        <span v-for="(column, ci) in displayColumns" :key="column.key" :style="cellStyle(column)">
-          <template v-if="ci === 0"><b class="table-avatar" :style="{ background: `${config.style.accent || '#665cf6'}18`, color: config.style.accent || '#665cf6' }">{{ String(cellValue(row, column, ci)).slice(0, 1) }}</b>{{ cellValue(row, column, ci) }}</template>
+        <span v-for="(column, ci) in tableDisplayColumns" :key="column.key" :style="cellStyle(column)">
+          <template v-if="column.key === '__index'">{{ ri + 1 }}</template>
+          <template v-else-if="ci === 0 || (!config.content.showIndex && ci === 0)"><b class="table-avatar" :style="{ background: `${config.style.accent || '#665cf6'}18`, color: config.style.accent || '#665cf6' }">{{ String(cellValue(row, column, ci)).slice(0, 1) }}</b>{{ cellValue(row, column, ci) }}</template>
           <template v-else>{{ cellValue(row, column, ci) }}</template>
         </span>
       </div>
     </template>
     <template v-else>
       <div v-for="row in 4" :key="row" class="render-table-row" :style="tableGridStyle()">
-        <span v-for="(column, col) in displayColumns" :key="column.key">
-          <template v-if="col === 0"><b class="table-avatar" :style="{ background: `${config.style.accent || '#665cf6'}18`, color: config.style.accent || '#665cf6' }">{{ ['星', '云', '北', '原'][row - 1] }}</b>{{ ['星河科技', '云帆网络', '北辰贸易', '原野设计'][row - 1] }}</template>
+        <span v-for="(column, col) in tableDisplayColumns" :key="column.key">
+          <template v-if="column.key === '__index'">{{ row }}</template>
+          <template v-else-if="col === 0 || (!config.content.showIndex && col === 0)"><b class="table-avatar" :style="{ background: `${config.style.accent || '#665cf6'}18`, color: config.style.accent || '#665cf6' }">{{ ['星', '云', '北', '原'][row - 1] }}</b>{{ ['星河科技', '云帆网络', '北辰贸易', '原野设计'][row - 1] }}</template>
           <template v-else-if="col === 1">{{ ['陈晨', '李想', '王楠', '赵晴'][row - 1] }}</template>
           <template v-else-if="col === 2"><i class="table-status" :class="row % 3 === 0 ? 'waiting' : 'done'">{{ row % 3 === 0 ? '跟进中' : '已成交' }}</i></template>
           <template v-else>{{ row % 2 ? '今天 10:24' : '昨天 16:08' }}</template>

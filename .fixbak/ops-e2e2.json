@@ -1,0 +1,10 @@
+[
+  {"line": 1990, "find": "`设计[^`]*", "replace": "`设计切换入口产生 renderer error：${errors.join('; ')}"},
+  {"line": 2287, "find": "`[^`]*齐结果[^`]*", "replace": "`左对齐结果不一致：${after.join(', ')}"},
+  {"line": 2290, "find": "`测试初始位置未形成可验证差异[^`]*", "replace": "`测试初始位置未形成可验证差异：${JSON.stringify(before)}"},
+  {"line": 2305, "find": "`[^`]*撤[^`]*", "replace": "`左对齐操作未被撤销：${JSON.stringify({ before, undone })}"},
+  {"line": 2452, "find": "类型数量异常[^`]*", "replace": "类型数量异常：${allTypes.length}"},
+  {"line": 2584, "find": "节点缺[^`]*", "replace": "节点缺失"},
+  {"line": 2587, "find": "渲染尺寸无效[^`]*", "replace": "渲染尺寸无效：${item.width}x${item.height}"},
+  {"line": 2902, "find": "`菜单越界[^`]*", "replace": "`菜单越界：${JSON.stringify(menu)}"}
+]

@@ -58,7 +58,7 @@ export function createDesignerPersistence(options: {
   async function flush(flushHistory: () => void, isDirty: () => boolean) {
     clear()
     flushHistory()
-    if (isDirty()) await options.saveProject(options.message || '????')
+    if (isDirty()) await options.saveProject(options.message || '自动保存')
   }
 
   function schedule(flushHistory: () => void, isDirty: () => boolean) {

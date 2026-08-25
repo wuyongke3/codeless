@@ -486,10 +486,10 @@ export function useLowcode() {
       const documentFile = exportDesignExchangeFromProject(project, designer.selectedWidgetIds.value)
       const api = window.lowcode || browserApi
       const result = await api.exportDesignExchange(documentFile)
-      if (!result.canceled) notify('????????????')
+      if (!result.canceled) notify('设计交换文件已导出')
     } catch (error) {
       console.error(error)
-      notify('??????????????????', 'danger')
+      notify('导出设计交换文件失败，请稍后重试。', 'danger')
     }
   }
 
@@ -501,13 +501,13 @@ export function useLowcode() {
       const conversion = importDesignExchangeDocument(result.document as DesignExchangeDocument, 0, 0)
       const inserted = designer.insertWidgets(conversion.widgets)
       if (!inserted.length) {
-        notify('??????????????', 'info')
+        notify('没有可导入的设计节点。', 'info')
         return
       }
-      notify(`???${conversion.sourceName}??? ${conversion.nodeCount} ?????`)
+      notify(`已从 ${conversion.sourceName} 导入 ${conversion.nodeCount} 个设计节点`)
     } catch (error) {
       console.error(error)
-      notify('???????????????????', 'danger')
+      notify('导入设计交换文件失败，请检查文件后重试。', 'danger')
     }
   }
 
