@@ -12,6 +12,8 @@ import CanvasWebGLLayer from '../components/CanvasWebGLLayer.vue'
 import CanvasContextMenu from '../components/CanvasContextMenu.vue'
 import CommandPalette from '../components/CommandPalette.vue'
 import TokenManagerPanel from '../components/TokenManagerPanel.vue'
+import WidgetDataBindingPanel from '../components/builder/WidgetDataBindingPanel.vue'
+import PublishServiceDialog from '../components/builder/PublishServiceDialog.vue'
 import VirtualLayerTree from '../components/VirtualLayerTree.vue'
 import { eventOptionsForWidget, widgetEventActionLabels } from '../composables/utils'
 import { widgetDefinitionMap, type WidgetFieldSchema } from '../components/registry/widgetRegistry'
@@ -26,6 +28,7 @@ const canvasViewportRef = props.ui.canvasViewportRef
 const commandPaletteOpen = ref(false)
 const tokenManagerOpen = ref(false)
 const pageCreateOpen = ref(false)
+const publishDialogOpen = ref(false)
 const layerCanvasExpanded = ref(true)
 const spacePressed = ref(false)
 const eventActionOptions = Object.entries(widgetEventActionLabels).map(([value, label]) => ({ value, label }))
@@ -63,6 +66,16 @@ const tokenOptionMap = {
     { label: 'Medium shadow', value: 'shadow.md' },
   ],
 } as const
+
+async function publishCurrentProject() {
+  const service = await state.publishProject()
+  if (service) publishDialogOpen.value = true
+}
+
+async function stopCurrentPublishedService() {
+  const stopped = await state.stopPublishedService()
+  if (stopped) publishDialogOpen.value = true
+}
 
 function tokenOptionsFor(kind: keyof typeof tokenOptionMap) {
   return tokenOptionMap[kind]
@@ -227,7 +240,7 @@ onBeforeUnmount(() => {
     @export-project="state.exportProject"
     @import-design-exchange="state.importDesignExchange"
     @export-design-exchange="state.exportDesignExchange"
-    @publish="state.publishProject"
+    @publish="publishCurrentProject"
   />
   <section class="builder-layout" :style="{ '--component-panel-width': state.componentPanelWidth + 'px', '--inspector-panel-width': state.inspectorPanelWidth + 'px' }">
     <aside class="component-panel" :style="{ '--panel-width': `${state.componentPanelWidth}px` }">
@@ -368,15 +381,12 @@ onBeforeUnmount(() => {
             <label v-if="['button', 'input', 'select', 'table', 'stat', 'image'].includes(state.selectedWidget.type)" class="property-field"><span>圆角</span><div class="unit-input"><input v-model.number="state.selectedWidget.config.style.borderRadius" type="number" min="0" max="40" @input="state.syncWidget(state.selectedWidget)" /><em>px</em></div></label>
           </section>
           <section class="property-section"><div class="property-title"><span>布局与图层</span><AppIcon name="chevron-down" :size="14" /></div><div class="position-grid"><label><span>X</span><input v-model.number="state.selectedWidget.config.layout.x" type="number" @input="state.syncWidget(state.selectedWidget)" /></label><label><span>Y</span><input v-model.number="state.selectedWidget.config.layout.y" type="number" @input="state.syncWidget(state.selectedWidget)" /></label><label><span>W</span><input v-model.number="state.selectedWidget.config.layout.width" type="number" min="24" @input="state.syncWidget(state.selectedWidget)" /></label><label><span>H</span><input v-model.number="state.selectedWidget.config.layout.height" type="number" min="24" @input="state.syncWidget(state.selectedWidget)" /></label></div><label class="property-check layer-check"><input v-model="state.selectedWidget.config.layout.locked" type="checkbox" @change="state.syncWidget(state.selectedWidget)" /><span><i><AppIcon name="lock" :size="11" /></i>锁定组件，禁止拖拽和调整</span></label><label class="property-check layer-check"><input v-model="state.selectedWidget.config.layout.hidden" type="checkbox" @change="state.syncWidget(state.selectedWidget)" /><span><i><AppIcon name="eye" :size="11" /></i>在预览中隐藏</span></label></section>
-          <section v-if="componentDefinition(state.selectedWidget.type).capabilities.dataBinding" class="property-section"><div class="property-title"><span>数据绑定</span><AppIcon name="chevron-down" :size="14" /></div>
-            <label class="property-field"><span>绑定数据</span><select :value="state.selectedWidget.config.data.table || ''" @change="state.updateDataSource(state.selectedWidget, $event)"><option value="">不绑定数据（静态数值）</option><option v-for="table in state.tables" :key="table.name" :value="table.name">{{ table.title }}（{{ table.name }}）</option></select></label>
-            <template v-if="state.selectedWidget.config.data.table">
-              <label class="property-field"><span>查询模式</span><select v-model="state.selectedWidget.config.data.mode" @change="state.syncWidget(state.selectedWidget)"><option value="list">多行列表</option><option value="single">单行数据</option><option v-if="state.selectedWidget.type === 'stat'" value="count">记录计数</option><option v-if="state.selectedWidget.type === 'stat'" value="aggregate">聚合计算</option></select></label>
-              <div v-if="state.selectedWidget.type === 'select'" class="property-row"><label class="property-field"><span>显示字段</span><input v-model="state.selectedWidget.config.data.labelField" placeholder="name" @input="state.syncWidget(state.selectedWidget)" /></label><label class="property-field"><span>值字</span><input v-model="state.selectedWidget.config.data.valueField" placeholder="id" @input="state.syncWidget(state.selectedWidget)" /></label></div>
-              <template v-if="state.selectedWidget.config.data.mode === 'aggregate'"><label class="property-field"><span>聚合函数</span><select v-model="state.selectedWidget.config.data.aggregate.function" @change="state.syncWidget(state.selectedWidget)"><option value="count">计数</option><option value="sum">求和</option><option value="avg">平均</option><option value="min">最小值</option><option value="max">最大值</option></select></label><label class="property-field"><span>聚合字段</span><input v-model="state.selectedWidget.config.data.aggregate.field" placeholder="amount" @input="state.syncWidget(state.selectedWidget)" /></label></template>
-              <label class="property-field"><span>过滤条件</span><input v-model="state.selectedWidget.config.data.where" placeholder="例如 status = '跟进'" @input="state.syncWidget(state.selectedWidget)" /></label><label class="property-field"><span>排序字段</span><input v-model="state.selectedWidget.config.data.orderBy" placeholder="例如 id DESC" @input="state.syncWidget(state.selectedWidget)" /></label><label v-if="state.selectedWidget.config.data.mode === 'list'" class="property-field"><span>返回行数</span><input v-model.number="state.selectedWidget.config.data.limit" type="number" min="1" max="200" @input="state.syncWidget(state.selectedWidget)" /></label>
-            </template>
-          </section>
+          <WidgetDataBindingPanel
+            v-if="componentDefinition(state.selectedWidget.type).capabilities.dataBinding"
+            :widget="state.selectedWidget"
+            :tables="state.tables"
+            @update="state.updateDataBinding(state.selectedWidget, $event)"
+          />
           <section v-if="state.selectedWidget.type === 'button'" class="property-section"><div class="property-title"><span>兼容表单提交</span><AppIcon name="chevron-down" :size="14" /></div><label class="property-field"><span>提交到数据表</span><select :value="state.selectedWidget.config.submitTo?.table || ''" @change="state.updateSubmitTarget(state.selectedWidget, $event)"><option value="">不提交</option><option v-for="table in state.tables" :key="table.name" :value="table.name">{{ table.title }}（{{ table.name }}）</option></select></label><small class="field-help">按钮可将当前页面表单字段提交到选定数据表。</small></section>
         </div>
         <div v-else class="events-panel">
@@ -421,6 +431,13 @@ onBeforeUnmount(() => {
   <CanvasContextMenu :ui="ui" />
   <CommandPalette :ui="ui" v-model:open="commandPaletteOpen" />
   <TokenManagerPanel :ui="ui" v-model:open="tokenManagerOpen" />
+  <PublishServiceDialog
+    v-model:open="publishDialogOpen"
+    :service="state.publishedService"
+    :publishing="state.publishing"
+    @publish="publishCurrentProject"
+    @stop="stopCurrentPublishedService"
+  />
   <CreatePageDialog
     v-model:open="pageCreateOpen"
     :existing-paths="state.pages.map((page: any) => page.path)"

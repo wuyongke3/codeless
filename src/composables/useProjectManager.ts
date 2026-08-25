@@ -1,5 +1,5 @@
 import { computed, nextTick, reactive, ref, type ComputedRef, type Ref } from 'vue'
-import type { ActivityItem, BootstrapData, LowCodeProject } from '../types/lowcode'
+import type { ActivityItem, BootstrapData, LowCodeProject, PublishedServiceInfo } from '../types/lowcode'
 import { clone, createTemplateLayout, fallbackBootstrap, makeId, type Area } from './utils'
 import { normalizeProject } from './widgetConfig'
 import { browserExportProject, browserImportProject, browserSaveProject } from './browserData'
@@ -28,6 +28,8 @@ export function useProjectManager(options: ProjectManagerOptions) {
     dirty, dirtyRevision, selectedWidgetId, notify, loadTables, resetDesigner, publishCollaborationProject, navigateToArea,
   } = options
   const saving = ref(false)
+  const publishing = ref(false)
+  const publishedService = ref<PublishedServiceInfo | null>(null)
   interface SaveRequest {
     snapshot: LowCodeProject
     message: string
@@ -244,10 +246,45 @@ export function useProjectManager(options: ProjectManagerOptions) {
   }
 
   async function publishProject() {
-    if (!currentProject.value) return
-    currentProject.value.status = 'published'
-    dirty.value = true
-    await saveProject('应用已发布，本机可立即使用')
+    const project = currentProject.value
+    if (!project) return null
+    publishing.value = true
+    try {
+      await saveProject('\u53d1\u5e03\u524d\u4fdd\u5b58')
+      if (!window.lowcode?.publishService) {
+        notify('\u5c40\u57df\u7f51\u53d1\u5e03\u4ec5\u5728\u684c\u9762\u5e94\u7528\u4e2d\u53ef\u7528\u3002', 'info')
+        return null
+      }
+      const result = await window.lowcode.publishService(clone(project))
+      if (!result.success || !result.service) throw new Error('\u53d1\u5e03\u670d\u52a1\u542f\u52a8\u5931\u8d25')
+      project.status = 'published'
+      dirty.value = true
+      await saveProject('\u5e94\u7528\u5df2\u53d1\u5e03')
+      publishedService.value = result.service
+      notify('\u5e94\u7528\u5df2\u4f5c\u4e3a\u5c40\u57df\u7f51\u5b50\u670d\u52a1\u53d1\u5e03\u3002')
+      return result.service
+    } catch (error) {
+      console.error(error)
+      notify('\u53d1\u5e03\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7aef\u53e3\u548c\u6570\u636e\u670d\u52a1\u3002', 'danger')
+      return null
+    } finally {
+      publishing.value = false
+    }
+  }
+
+  async function stopPublishedService() {
+    const project = currentProject.value
+    if (!project || !window.lowcode?.stopPublishedService) return false
+    try {
+      await window.lowcode.stopPublishedService(project.id)
+      publishedService.value = null
+      notify('\u5c40\u57df\u7f51\u53d1\u5e03\u670d\u52a1\u5df2\u505c\u6b62\u3002', 'info')
+      return true
+    } catch (error) {
+      console.error(error)
+      notify('\u505c\u6b62\u53d1\u5e03\u670d\u52a1\u5931\u8d25\u3002', 'danger')
+      return false
+    }
   }
 
   async function duplicateProject(project: LowCodeProject) {
@@ -343,7 +380,7 @@ export function useProjectManager(options: ProjectManagerOptions) {
   }
 
   return {
-    saving, showCreateModal, showDeleteConfirm, createForm, bootstrap, openBuilder, saveProject,
-    exportProject, importProject, publishProject, duplicateProject, openCreateProject, createProject, confirmDeleteProject, formatRelative, formatDate,
+    saving, publishing, publishedService, showCreateModal, showDeleteConfirm, createForm, bootstrap, openBuilder, saveProject,
+    exportProject, importProject, publishProject, stopPublishedService, duplicateProject, openCreateProject, createProject, confirmDeleteProject, formatRelative, formatDate,
   }
 }

@@ -629,6 +629,23 @@ export interface WindowControlsApi {
   onStateChange: (listener: (state: { maximized: boolean }) => void) => () => void
 }
 
+export interface PublishedServiceInfo {
+  projectId: string
+  projectName: string
+  status: 'running' | 'stopped'
+  port: number
+  host: string
+  localUrl: string
+  lanUrls: string[]
+  token: string
+  publishedAt: string
+}
+
+export interface PublishedServiceResult {
+  success: boolean
+  service?: PublishedServiceInfo
+}
+
 export interface LowCodeApi {
   window: WindowControlsApi
   bootstrap: () => Promise<BootstrapData>
@@ -642,6 +659,9 @@ export interface LowCodeApi {
   importDesignExchange: () => Promise<DesignExchangeImportResult>
   duplicateProject: (projectId: string) => Promise<LowCodeProject>
   deleteProject: (projectId: string) => Promise<{ success: boolean }>
+  publishService: (project: LowCodeProject) => Promise<PublishedServiceResult>
+  stopPublishedService: (projectId: string) => Promise<{ success: boolean }>
+  getPublishedServices: () => Promise<PublishedServiceInfo[]>
   listTables: () => Promise<TableMeta[]>
   describeTable: (tableName: string) => Promise<TableMeta>
   queryRows: (table: string, options?: DataQueryOptions) => Promise<QueryResult>

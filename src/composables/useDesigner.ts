@@ -1,5 +1,5 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
-import type { LowCodeProject, LowCodeWidget, PageLayout, WidgetEvent, WidgetEventAction, WidgetEventActionType, WidgetEventType, WidgetStyleTokenRefs, WidgetType } from '../types/lowcode'
+import type { LowCodeProject, LowCodeWidget, WidgetDataBinding, PageLayout, WidgetEvent, WidgetEventAction, WidgetEventActionType, WidgetEventType, WidgetStyleTokenRefs, WidgetType } from '../types/lowcode'
 import { clone, createWidget, eventOptionsForWidget, makeId, paletteGroups, widgetDefaults, type Area } from './utils'
 import { getWidgetConfig, getWidgetEvents, isContainerType, normalizeWidget, parseColumns, parseOptions, serializeColumns, serializeOptions, setWidgetFrame, syncLegacyProps } from './widgetConfig'
 import type { LayoutPatch } from './layoutHistory'
@@ -1911,6 +1911,14 @@ export function useDesigner(
     syncWidget(widget)
   }
 
+  function updateDataBinding(widget: LowCodeWidget, binding: WidgetDataBinding) {
+    const config = getWidgetConfig(widget)
+    const cleanBinding = Object.fromEntries(Object.entries(binding).filter(([, value]) => value !== undefined && value !== '')) as WidgetDataBinding
+    config.data = cleanBinding.source === 'table' ? { ...cleanBinding, source: 'table' } : { source: 'static' }
+    syncLegacyProps(widget)
+    syncWidget(widget)
+  }
+
   function updateSubmitTarget(widget: LowCodeWidget, event: Event) {
     const table = (event.target as HTMLSelectElement).value
     const config = getWidgetConfig(widget)
@@ -2192,7 +2200,7 @@ export function useDesigner(
     startPanelResize, startCanvasSelection, handleCanvasClick, insertWidgets, handleCanvasPanPointerDown, handleCanvasPanPointerMove, handleCanvasPanPointerUp, handleCanvasPanPointerCancel, handleCanvasViewportKeydown, handleCanvasViewportKeyup,
     startWidgetMove, startWidgetResize, removeSelectedWidget, duplicateSelectedWidget, copySelectedWidgets, cutSelectedWidgets, pasteWidgets, renameSelectedWidget, selectAllWidgets, bringToFront, sendToBack, moveSelectedLayer, canMoveSelectedLayer,
     alignSelectedWidgets, distributeSelectedWidgets, toggleCanvasGrid, toggleCanvasSnap,
-    toggleSelectedLocked, toggleSelectedHidden, toggleWidgetLocked, toggleWidgetHidden, createSelectedComponentDefinition, createSelectedComponentInstance, refreshSelectedComponentInstance, detachSelectedComponentInstance, syncWidget, updateWidgetVariant, updateWidgetTokenRef, updateDataSource, updateSubmitTarget, updateColumns, updateOptions, serializeWidgetColumns, serializeWidgetOptions, widgetStyle, resetDesigner,
+    toggleSelectedLocked, toggleSelectedHidden, toggleWidgetLocked, toggleWidgetHidden, createSelectedComponentDefinition, createSelectedComponentInstance, refreshSelectedComponentInstance, detachSelectedComponentInstance, syncWidget, updateWidgetVariant, updateWidgetTokenRef, updateDataSource, updateDataBinding, updateSubmitTarget, updateColumns, updateOptions, serializeWidgetColumns, serializeWidgetOptions, widgetStyle, resetDesigner,
     addWidgetEvent, removeWidgetEvent, addEventAction, removeEventAction,
   }
 }

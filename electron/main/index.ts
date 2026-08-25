@@ -10,6 +10,7 @@ import { parseDesignExchangeDocument, serializeDesignExchangeDocument } from '..
 import { DatabaseClient } from '../database/client'
 import { PluginRegistry } from '../plugins/registry'
 import { CollaborationHub } from '../collaboration/hub'
+import { PublishedServiceManager } from '../publishing/PublishedServiceManager'
 import type { CollaborationCreateInput, CollaborationJoinInput } from '../../src/types/collaboration'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -33,6 +34,7 @@ const windows = new Set<BrowserWindow>()
 let collaborationHub: CollaborationHub | null = null
 let databaseClient: DatabaseClient | null = null
 let pluginRegistry: PluginRegistry | null = null
+let publishedServiceManager: PublishedServiceManager | null = null
 let databasePath = ''
 let isQuitting = false
 
@@ -124,6 +126,11 @@ function getDatabaseClient() {
 function getCollaborationHub() {
   if (!collaborationHub) throw new Error('Collaboration module is not initialized')
   return collaborationHub
+}
+
+function getPublishedServiceManager() {
+  if (!publishedServiceManager) throw new Error('Published service manager is not initialized')
+  return publishedServiceManager
 }
 
 function getPluginRegistry() {
@@ -389,6 +396,21 @@ function registerIpcHandlers() {
     return getDatabaseClient().request('deleteProject', projectId)
   })
 
+  ipcMain.handle('lowcode:publish-service', async (event, project: LowCodeProject) => {
+    assertTrustedSender(event)
+    const service = await getPublishedServiceManager().publish(project)
+    return { success: true, service }
+  })
+  ipcMain.handle('lowcode:stop-published-service', async (event, projectId: string) => {
+    assertTrustedSender(event)
+    await getPublishedServiceManager().stop(projectId)
+    return { success: true }
+  })
+  ipcMain.handle('lowcode:get-published-services', (event) => {
+    assertTrustedSender(event)
+    return getPublishedServiceManager().list()
+  })
+
   ipcMain.handle('lowcode:list-tables', (event) => {
     assertTrustedSender(event)
     return getDatabaseClient().request('listTables')
@@ -517,6 +539,7 @@ async function createWindow(sessionId?: string) {
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
   await initializeDatabase()
+  publishedServiceManager = new PublishedServiceManager(getDatabaseClient())
   pluginRegistry = new PluginRegistry(app.getPath('userData'))
   await pluginRegistry.ensureDirectory()
   configureOfflineSession()
@@ -536,10 +559,12 @@ app.on('before-quit', event => {
   isQuitting = true
   const client = databaseClient
   const hub = collaborationHub
+  const publisher = publishedServiceManager
   databaseClient = null
   pluginRegistry = null
   collaborationHub = null
-  void Promise.all([hub?.close(), client?.close()]).finally(() => {
+  publishedServiceManager = null
+  void Promise.all([hub?.close(), publisher?.stopAll(), client?.close()]).finally(() => {
     windows.clear()
     app.quit()
   })
