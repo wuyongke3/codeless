@@ -1012,6 +1012,11 @@ export function useDesigner(
   }
 
   function startCanvasSelection(event: PointerEvent) {
+    // Keep selection gestures on the canvas background only. This guard also
+    // protects callers that invoke the composable directly, bypassing the
+    // BuilderView capture-phase event boundary.
+    const targetElement = event.target instanceof Element ? event.target : null
+    if (targetElement?.closest('[data-widget-id]')) return
     if (event.button !== 0 || !currentProject.value || moveState || resizeState || selectionState) return
     const target = canvasRef.value
     if (!target) return

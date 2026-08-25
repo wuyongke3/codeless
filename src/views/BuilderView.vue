@@ -159,6 +159,15 @@ function dropLayer(event: DragEvent, targetId: string) {
 
 function startCanvasPointer(event: PointerEvent) {
   const shouldPan = event.button === 1 || (event.button === 0 && spacePressed.value)
+
+  // The canvas uses capture phase so blank-canvas gestures can start before
+  // nested nodes receive the pointer event. A node gesture must stay owned by
+  // CanvasWidgetNode; otherwise marquee selection and widget dragging start
+  // at the same time and leave both interaction states active. Space+drag is
+  // intentionally exempt because it is the viewport-pan gesture.
+  const target = event.target instanceof Element ? event.target : null
+  if (!shouldPan && target?.closest('[data-widget-id]')) return
+
   if (!shouldPan) {
     state.startCanvasSelection(event)
     return

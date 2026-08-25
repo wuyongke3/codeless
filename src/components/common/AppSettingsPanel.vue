@@ -1,7 +1,9 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { ElButton, ElForm, ElFormItem, ElInputNumber, ElRadioButton, ElRadioGroup, ElSlider, ElSwitch } from 'element-plus/dist/index.full.js'
 import AppIcon from '../AppIcon.vue'
 import type { AppPreferencesController } from '../../composables/useAppPreferences'
+import { APP_FONT_SIZE_MAX, APP_FONT_SIZE_MIN, APP_FONT_SIZE_STEP } from '../../composables/useAppPreferences'
 
 const props = defineProps<{ open: boolean; preferences: AppPreferencesController }>()
 const emit = defineEmits<{ close: [] }>()
@@ -10,6 +12,10 @@ const resolvedTheme = computed(() => props.preferences.resolvedTheme.value)
 
 function close() {
   emit('close')
+}
+
+function formatFontSize(value: number) {
+  return `${value}px`
 }
 
 watch(() => props.open, open => {
@@ -21,34 +27,82 @@ watch(() => props.open, open => {
   <Teleport to="body">
     <Transition name="fade">
       <div v-if="open" class="settings-backdrop" @click.self="close">
-        <section ref="panelRef" class="app-settings-panel" role="dialog" aria-modal="true" aria-labelledby="app-settings-title" tabindex="-1" @keydown.esc.stop="close">
+        <section
+          ref="panelRef"
+          class="app-settings-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="app-settings-title"
+          tabindex="-1"
+          @keydown.esc.stop="close"
+        >
           <header class="app-settings-header">
-            <div><span><AppIcon name="settings" :size="17" /></span><div><strong id="app-settings-title">显示设置</strong><small>调整应用的视觉与交互偏好</small></div></div>
-            <button type="button" aria-label="关闭设置" title="关闭" @click="close"><AppIcon name="close" :size="16" /></button>
+            <div>
+              <span><AppIcon name="settings" :size="17" /></span>
+              <div>
+                <strong id="app-settings-title">显示设置</strong>
+                <small>调整应用的视觉与交互偏好</small>
+              </div>
+            </div>
+            <ElButton text circle aria-label="关闭设置" title="关闭" @click="close">
+              <AppIcon name="close" :size="16" />
+            </ElButton>
           </header>
-          <div class="app-settings-content">
-            <section>
-              <div class="settings-section-title"><span>主题</span><small>选择应用的显示主题</small></div>
-              <div class="settings-option-grid" role="radiogroup" aria-label="主题">
-                <label :class="{ active: preferences.preferences.theme === 'system' }"><input v-model="preferences.preferences.theme" type="radio" value="system" /><AppIcon name="settings" :size="16" /><span>跟随系统</span></label>
-                <label :class="{ active: preferences.preferences.theme === 'light' }"><input v-model="preferences.preferences.theme" type="radio" value="light" /><span class="theme-dot light"></span><span>浅色</span></label>
-                <label :class="{ active: preferences.preferences.theme === 'dark' }"><input v-model="preferences.preferences.theme" type="radio" value="dark" /><span class="theme-dot dark"></span><span>深色</span></label>
+
+          <ElForm class="app-settings-content" label-position="top">
+            <ElFormItem label="主题">
+              <small class="settings-help">选择应用的显示主题</small>
+              <ElRadioGroup v-model="preferences.preferences.theme" class="settings-theme-group" aria-label="主题">
+                <ElRadioButton label="system">跟随系统</ElRadioButton>
+                <ElRadioButton label="light">浅色</ElRadioButton>
+                <ElRadioButton label="dark">深色</ElRadioButton>
+              </ElRadioGroup>
+            </ElFormItem>
+
+            <ElFormItem label="全局字体大小">
+              <small class="settings-help">应用于所有页面结构中的文字，实时生效</small>
+              <div class="font-size-control">
+                <ElSlider
+                  v-model="preferences.preferences.fontSize"
+                  :min="APP_FONT_SIZE_MIN"
+                  :max="APP_FONT_SIZE_MAX"
+                  :step="APP_FONT_SIZE_STEP"
+                  :format-tooltip="formatFontSize"
+                  show-stops
+                  aria-label="全局字体大小"
+                />
+                <ElInputNumber
+                  v-model="preferences.preferences.fontSize"
+                  :min="APP_FONT_SIZE_MIN"
+                  :max="APP_FONT_SIZE_MAX"
+                  :step="APP_FONT_SIZE_STEP"
+                  controls-position="right"
+                  size="small"
+                  aria-label="全局字体大小数值"
+                />
               </div>
-            </section>
-            <section>
-              <div class="settings-section-title"><span>字号</span><small>调整界面内容的显示密度</small></div>
-              <div class="settings-option-grid font-grid" role="radiogroup" aria-label="字号">
-                <label :class="{ active: preferences.preferences.fontSize === 'small' }"><input v-model="preferences.preferences.fontSize" type="radio" value="small" /><b class="font-small">A</b><span>小</span></label>
-                <label :class="{ active: preferences.preferences.fontSize === 'medium' }"><input v-model="preferences.preferences.fontSize" type="radio" value="medium" /><b class="font-medium">A</b><span>标准</span></label>
-                <label :class="{ active: preferences.preferences.fontSize === 'large' }"><input v-model="preferences.preferences.fontSize" type="radio" value="large" /><b class="font-large">A</b><span>大</span></label>
+              <div class="font-size-preview" aria-live="polite">
+                <span :style="{ fontSize: `${preferences.preferences.fontSize}px` }">Aa</span>
+                <div>
+                  <strong>{{ preferences.preferences.fontSize }} px</strong>
+                  <small>示例文字：全局字体会同步到当前应用的所有页面</small>
+                </div>
               </div>
-            </section>
-            <section class="settings-toggle-row">
-              <div><strong>减少动效</strong><small>减少动画和过渡效果</small></div>
-              <label class="settings-switch"><input v-model="preferences.preferences.reducedMotion" type="checkbox" /><i></i></label>
-            </section>
-          </div>
-          <footer><small>当前使用{{ resolvedTheme === 'dark' ? '深色主题' : '浅色主题' }}</small><button type="button" @click="preferences.reset()">恢复默认</button></footer>
+            </ElFormItem>
+
+            <div class="settings-toggle-row">
+              <div>
+                <strong>减少动效</strong>
+                <small>减少动画和过渡效果</small>
+              </div>
+              <ElSwitch v-model="preferences.preferences.reducedMotion" aria-label="减少动效" />
+            </div>
+          </ElForm>
+
+          <footer>
+            <small>当前使用{{ resolvedTheme === 'dark' ? '深色主题' : '浅色主题' }}</small>
+            <ElButton text type="primary" size="small" @click="preferences.reset()">恢复默认</ElButton>
+          </footer>
         </section>
       </div>
     </Transition>
