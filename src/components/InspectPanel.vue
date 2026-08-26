@@ -101,13 +101,12 @@ async function importLocalAsset() {
       </section>
 
       <section class="inspect-section">
-        <div class="inspect-section-heading"><strong>属性与 Token</strong><small>{{ Object.keys(model.tokenRefs).length }} refs</small></div>
+        <div class="inspect-section-heading"><strong>样式属性</strong></div>
         <dl class="inspect-list">
           <div><dt>颜色</dt><dd>{{ model.style.color || '—' }}</dd></div>
           <div><dt>背景</dt><dd>{{ model.style.background || '—' }}</dd></div>
           <div><dt>圆角</dt><dd>{{ model.style.borderRadius ?? '—' }}</dd></div>
           <div><dt>字号</dt><dd>{{ model.style.fontSize ?? '—' }}</dd></div>
-          <div v-for="(value, key) in model.tokenRefs" :key="key"><dt>{{ key }}</dt><dd>{{ value }} → {{ model.resolvedTokens[key] ?? '未解析' }}</dd></div>
         </dl>
       </section>
 

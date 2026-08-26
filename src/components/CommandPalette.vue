@@ -65,7 +65,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <Transition name="command-palette">
       <div v-if="open" class="command-palette-backdrop" @mousedown.self="close">
         <section class="command-palette" role="dialog" aria-modal="true" aria-label="命令面板">
-          <header class="command-palette-search"><span>⌘</span><input ref="inputRef" v-model="query" placeholder="搜索命令、页面、组件或 Token" aria-label="搜索命令" /><kbd>Esc</kbd></header>
+          <header class="command-palette-search"><span>⌘</span><input ref="inputRef" v-model="query" placeholder="搜索命令、页面或组件" aria-label="搜索命令" /><kbd>Esc</kbd></header>
           <div v-if="flatCommands.length" class="command-palette-list">
             <template v-for="([group, commands]) in groupedCommands" :key="group">
               <p class="command-palette-group">{{ group }}</p>

@@ -36,6 +36,16 @@
 
 /* Modal / Loading container content. */
 .canvas-widget:has(.canvas-children-layer) { isolation: isolate; }
+
+/* 运行时节点必须与编辑器节点一样脱离文档流。
+ * RuntimeWidgetNode 仅提供 left/top/width/height 内联样式；若没有 absolute 定位，
+ * left/top 不会生效，预览中的组件会按 DOM 顺序排列，和画布坐标完全不同。 */
+.runtime-widget-node {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+}
+.runtime-widget-node:has(.runtime-children-layer) { isolation: isolate; }
 .canvas-children-layer, .runtime-children-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: auto; }
 .canvas-children-layer > .canvas-widget { pointer-events: auto; }
 .canvas-children-layer > .canvas-widget.dragging { pointer-events: none; }

@@ -36,6 +36,23 @@ function parseActionPayload(value: string | undefined, payload: RuntimeEventPayl
   try { return JSON.parse(resolved) as unknown } catch { return resolved }
 }
 
+function appendNavigationParams(target: string, params: Record<string, unknown>) {
+  const hashIndex = target.indexOf('#')
+  const hash = hashIndex >= 0 ? target.slice(hashIndex) : ''
+  const targetWithoutHash = hashIndex >= 0 ? target.slice(0, hashIndex) : target
+  const queryIndex = targetWithoutHash.indexOf('?')
+  const pathname = queryIndex >= 0 ? targetWithoutHash.slice(0, queryIndex) : targetWithoutHash
+  const searchParams = new URLSearchParams(queryIndex >= 0 ? targetWithoutHash.slice(queryIndex + 1) : '')
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null) return
+    searchParams.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value))
+  })
+
+  const query = searchParams.toString()
+  return `${pathname}${query ? `?${query}` : ''}${hash}`
+}
+
 export function useRuntime(options: RuntimeOptions) {
   const runtimeValues = reactive<Record<string, string>>({})
   const serviceVisibility = reactive<Record<string, boolean>>({})
@@ -117,7 +134,14 @@ export function useRuntime(options: RuntimeOptions) {
     const values = collectFormValues()
     if (action.type === 'navigate') {
       const target = resolveValue(action.target || action.value, payload, values)
-      if (target) await options.navigate(target)
+      const params = parseActionPayload(action.payload, payload, values)
+      if (!target) return
+      if (params !== undefined && (params === null || Array.isArray(params) || typeof params !== 'object')) {
+        options.notify('页面导航参数必须是 JSON 对象', 'danger')
+        await options.navigate(target)
+        return
+      }
+      await options.navigate(params ? appendNavigationParams(target, params as Record<string, unknown>) : target)
       return
     }
     if (action.type === 'navigateBack') {

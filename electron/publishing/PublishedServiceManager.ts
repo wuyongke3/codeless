@@ -3,6 +3,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import os from 'node:os'
 import type { LowCodeProject, LowCodeWidget, PublishedServiceInfo, QueryResult, TableMeta, WidgetDataBinding } from '../../src/types/lowcode'
 import type { DatabaseClient } from '../database/client'
+import { getRenderedWidgetFrame } from '../../src/composables/autoLayout'
+import { resolveWidgetConfig } from '../../src/composables/widgetConfig'
 
 interface RunningService {
   info: PublishedServiceInfo
@@ -40,13 +42,10 @@ function numeric(value: unknown, fallback: number) {
   return Number.isFinite(result) ? result : fallback
 }
 
-function widgetConfig(widget: LowCodeWidget): any {
-  return widget.config || {
-    layout: { x: widget.x, y: widget.y, width: widget.w, height: widget.h },
-    content: widget.props || {},
-    style: {},
-    data: { source: 'static' },
-  }
+function widgetConfig(widget: LowCodeWidget, designSystem?: LowCodeProject['designSystem']): any {
+  // 与画布和本地预览共用同一份配置解析：补齐旧数据、应用组件变体和设计令牌。
+  // 发布端此前直接读取原始 config，导致主题色、圆角等视觉属性发生漂移。
+  return resolveWidgetConfig(widget, designSystem)
 }
 
 function getBoundFields(binding: WidgetDataBinding) {
@@ -93,29 +92,30 @@ function containerContentStyle(widget: LowCodeWidget, config: any) {
   return `top:${padding + header}px;right:${padding}px;bottom:${padding}px;left:${padding}px;`
 }
 
-function widgetFrameStyle(widget: LowCodeWidget, config: any) {
-  const layout = config.layout || {}
+function widgetFrameStyle(widget: LowCodeWidget, config: any, widgets: LowCodeWidget[]) {
+  // 画布会为 stack/grid 的子组件计算自动布局后的坐标和尺寸。发布端也必须使用
+  // 这套计算，不能直接使用持久化的 x/y，否则自动布局容器会在发布后错位。
+  const layout = { ...config.layout, ...getRenderedWidgetFrame(widget, widgets) }
   const style = config.style || {}
   const width = Math.max(1, numeric(layout.width ?? widget.w, 160))
   const height = Math.max(1, numeric(layout.height ?? widget.h, 48))
-  const color = style.color || '#303133'
-  const background = style.background || (widget.type === 'button' ? style.accent || '#665cf6' : '#ffffff')
-  const borderWidth = Math.max(0, numeric(style.borderWidth, 1))
-  const borderColor = style.borderColor || '#ebeef5'
   const fontSize = Math.max(1, numeric(style.fontSize, widget.type === 'heading' ? 24 : 14))
   const fontWeight = Math.max(100, numeric(style.fontWeight, widget.type === 'heading' ? 700 : 400))
   const rotation = numeric(layout.rotation, 0)
   const zIndex = numeric(layout.zIndex, 1)
+  const hasSurface = containerTypes.has(widget.type) || widget.type === 'button' || Boolean(style.background)
+  const background = style.background || (widget.type === 'button' ? style.accent || '#665cf6' : '')
+  const borderWidth = Math.max(0, numeric(style.borderWidth, 0))
   return [
     `left:${numeric(layout.x, 0)}px`,
     `top:${numeric(layout.y, 0)}px`,
     `width:${width}px`,
     `height:${height}px`,
     `z-index:${zIndex}`,
-    `color:${htmlEscape(color)}`,
-    `background:${htmlEscape(background)}`,
-    `border:${borderWidth}px solid ${htmlEscape(borderColor)}`,
-    `border-radius:${Math.max(0, numeric(style.borderRadius, 8))}px`,
+    `color:${htmlEscape(style.color || (widget.type === 'heading' ? style.accent || '#171a2b' : '#303133'))}`,
+    hasSurface && background ? `background:${htmlEscape(background)}` : '',
+    borderWidth ? `border:${borderWidth}px solid ${htmlEscape(style.borderColor || '#ebeef5')}` : '',
+    `border-radius:${Math.max(0, numeric(style.borderRadius, containerTypes.has(widget.type) ? 10 : 0))}px`,
     `opacity:${Math.max(0, Math.min(1, numeric(style.opacity, 1)))}`,
     `font-size:${fontSize}px`,
     `font-weight:${fontWeight}`,
@@ -167,7 +167,7 @@ function buildRuntimeHtml(project: LowCodeProject, token: string) {
   }
 
   const renderWidget = (widget: LowCodeWidget, ancestors = new Set<string>()): string => {
-    const config = widgetConfig(widget)
+    const config = widgetConfig(widget, project.designSystem)
     if (config.layout?.hidden || ancestors.has(widget.id)) return ''
     const nextAncestors = new Set(ancestors)
     nextAncestors.add(widget.id)
@@ -176,7 +176,7 @@ function buildRuntimeHtml(project: LowCodeProject, token: string) {
       : ''
     const data = config.data || { source: 'static' }
     const dataBinding = data.source === 'table' ? ` data-binding='${htmlEscape(safeJson(data))}'` : ''
-    return `<article class="widget widget-${htmlEscape(widget.type)}" data-widget-id="${htmlEscape(widget.id)}"${dataBinding} style="${widgetFrameStyle(widget, config)}">${staticWidgetContent(widget, config, childrenMarkup)}</article>`
+    return `<article class="widget widget-${htmlEscape(widget.type)}" data-widget-id="${htmlEscape(widget.id)}"${dataBinding} style="${widgetFrameStyle(widget, config, project.layout.widgets)}">${staticWidgetContent(widget, config, childrenMarkup)}</article>`
   }
 
   const widgetMarkup = project.layout.widgets.filter(widget => !widget.parentId).map(widget => renderWidget(widget)).join('')
@@ -184,7 +184,7 @@ function buildRuntimeHtml(project: LowCodeProject, token: string) {
   const canvasHeight = Math.max(240, numeric(canvas.height, 760))
   const fontFamily = project.designSystem?.typography?.fontFamily || '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${htmlEscape(project.name)}</title><style>
-:root{font-family:${htmlEscape(fontFamily)};color:#303133;background:#f5f7fa}*{box-sizing:border-box}body{margin:0;min-width:100%;min-height:100vh;background:#f5f7fa}.published-shell{min-height:100vh;padding:28px;overflow:auto}.published-header{max-width:${canvasWidth}px;margin:0 auto 16px;display:flex;align-items:center;justify-content:space-between;gap:16px}.published-header h1{margin:0;font-size:22px}.published-header small{color:#909399}.published-canvas{position:relative;margin:0 auto;width:${canvasWidth}px;min-height:${canvasHeight}px;background:${htmlEscape(canvas.background || '#fff')};overflow:hidden;box-shadow:0 8px 32px #1f2d3d12}.widget{position:absolute;overflow:hidden;padding:12px}.widget-label{font:inherit;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.widget-description{margin:5px 0 0;color:#909399;font-size:.78em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.widget-value{margin-top:8px;color:inherit;line-height:1.55;white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis}.widget-control{display:block;width:100%;margin-top:8px;min-height:30px;padding:4px 8px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;color:#606266}.widget-table .widget-value{white-space:normal}.widget-table table{width:100%;border-collapse:collapse;font-size:.85em}.widget-table th,.widget-table td{padding:5px 6px;border-bottom:1px solid #ebeef5;text-align:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.widget-table th{background:#f5f7fa}.widget-button{color:#fff}.widget-button .widget-value{display:none}.widget-children{position:absolute;overflow:hidden;min-width:0;min-height:0}.widget-children>.widget{position:absolute}.widget-image{padding:0}.widget-image img{display:block;width:100%;height:100%}.widget-progress{height:8px;margin-top:10px;overflow:hidden;border-radius:999px;background:#ebeef5}.widget-progress i{display:block;height:100%;background:#409eff}.widget-divider{height:1px;margin-top:12px;background:#dcdfe6}.error{color:#f56c6c}.loading{color:#909399}@media(max-width:${canvasWidth + 56}px){.published-shell{padding:0}.published-header{padding:14px 16px;margin-bottom:0}.published-canvas{margin:0;transform-origin:top left;box-shadow:none}}
+:root{font-family:${htmlEscape(fontFamily)};color:#303133;background:#f5f7fa}*{box-sizing:border-box}body{margin:0;min-width:100%;min-height:100vh;background:#f5f7fa}.published-shell{min-height:100vh;padding:28px;overflow:auto}.published-header{max-width:${canvasWidth}px;margin:0 auto 16px;display:flex;align-items:center;justify-content:space-between;gap:16px}.published-header h1{margin:0;font-size:22px}.published-header small{color:#909399}.published-canvas{position:relative;margin:0 auto;width:${canvasWidth}px;height:${canvasHeight}px;box-sizing:border-box;background:${htmlEscape(canvas.background || '#fff')};overflow:hidden;box-shadow:0 8px 32px #1f2d3d12}.widget{position:absolute;box-sizing:border-box;overflow:hidden;transform-origin:center}.widget-label{font:inherit;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.widget-description{margin:5px 0 0;color:#909399;font-size:.78em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.widget-value{margin-top:8px;color:inherit;line-height:1.55;white-space:pre-wrap;overflow:hidden;text-overflow:ellipsis}.widget-control{display:block;width:100%;margin-top:8px;min-height:30px;padding:4px 8px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;color:#606266}.widget-table .widget-value{white-space:normal}.widget-table table{width:100%;border-collapse:collapse;font-size:.85em}.widget-table th,.widget-table td{padding:5px 6px;border-bottom:1px solid #ebeef5;text-align:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.widget-table th{background:#f5f7fa}.widget-button{display:flex;align-items:center;justify-content:center;color:#fff;text-align:center}.widget-button .widget-label{width:100%;padding:0 12px;box-sizing:border-box}.widget-card,.widget-frame,.widget-stack,.widget-grid,.widget-drawer{box-shadow:0 10px 24px rgba(32,35,55,.12)}.widget-button .widget-value{display:none}.widget-children{position:absolute;overflow:hidden;min-width:0;min-height:0}.widget-children>.widget{position:absolute}.widget-image{padding:0}.widget-image img{display:block;width:100%;height:100%}.widget-progress{height:8px;margin-top:10px;overflow:hidden;border-radius:999px;background:#ebeef5}.widget-progress i{display:block;height:100%;background:#409eff}.widget-divider{height:1px;margin-top:12px;background:#dcdfe6}.error{color:#f56c6c}.loading{color:#909399}@media(max-width:${canvasWidth + 56}px){.published-shell{padding:0}.published-header{padding:14px 16px;margin-bottom:0}.published-canvas{margin:0;transform-origin:top left;box-shadow:none}}
 </style></head><body><main class="published-shell"><header class="published-header"><h1>${htmlEscape(project.name)}</h1><small>局域网发布 · 数据实时读取</small></header><section class="published-canvas">${widgetMarkup}</section></main><script>window.__CODELESS_TOKEN__=${safeJson(token)};(()=>{const token=window.__CODELESS_TOKEN__;const valueText=v=>v===null||v===undefined||v===''?'—':String(v);const fields=b=>[...new Set([b.field,b.labelField,b.valueField,...Object.values(b.fields||{}),b.aggregate&&b.aggregate.field].filter(Boolean))];const clear=el=>{while(el.firstChild)el.removeChild(el.firstChild)};const setTable=(target,rows,columns)=>{clear(target);if(!rows.length){target.textContent='暂无数据';return}const table=document.createElement('table'),head=document.createElement('thead'),headRow=document.createElement('tr'),body=document.createElement('tbody');columns.forEach(column=>{const cell=document.createElement('th');cell.textContent=column;headRow.appendChild(cell)});head.appendChild(headRow);rows.forEach(row=>{const tr=document.createElement('tr');columns.forEach(column=>{const cell=document.createElement('td');cell.textContent=valueText(row[column]);tr.appendChild(cell)});body.appendChild(tr)});table.append(head,body);target.appendChild(table)};const setSelect=(target,rows,labelField,valueField)=>{clear(target);if(!rows.length){const option=document.createElement('option');option.textContent='暂无数据';target.appendChild(option);return}rows.forEach(row=>{const option=document.createElement('option');option.value=valueText(row[valueField]);option.textContent=valueText(row[labelField]);target.appendChild(option)})};async function load(el){const raw=el.dataset.binding;if(!raw)return;let binding;try{binding=JSON.parse(raw)}catch{return}if(binding.source!=='table'||!binding.table)return;const target=el.querySelector('[data-value]');if(!target)return;target.classList.add('loading');try{const qs=new URLSearchParams({token:token,widgetId:el.dataset.widgetId||''});const response=await fetch('/api/data/'+encodeURIComponent(binding.table)+'?'+qs);if(!response.ok)throw new Error('数据加载失败');const result=await response.json(),rows=result.rows||[],selected=fields(binding);if(binding.mode==='count'){target.textContent=String(result.total??rows.length)}else if(binding.mode==='aggregate'){target.textContent=valueText(rows[0]&&(rows[0].value??rows[0].count))}else if(el.classList.contains('widget-table')){setTable(target,rows,selected.length?selected:result.columns||[])}else if(el.classList.contains('widget-select')){setSelect(target,rows,binding.labelField||binding.field||selected[0]||result.columns[0],binding.valueField||binding.field||selected[0]||result.columns[0])}else{const field=binding.field||binding.labelField||selected[0]||result.columns[0];const text=rows.map(row=>valueText(row[field])).join('、')||'暂无数据';if(target instanceof HTMLInputElement)target.value=text;else target.textContent=text}}catch(error){target.textContent=error instanceof Error?error.message:'数据加载失败';target.classList.add('error')}finally{target.classList.remove('loading')}}document.querySelectorAll('[data-binding]').forEach(load)})();</script></body></html>`
 }
 

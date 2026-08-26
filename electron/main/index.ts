@@ -21,6 +21,11 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 export const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
+// Keep development instances isolated from the installed application's profile and singleton lock.
+if (VITE_DEV_SERVER_URL) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'codeless-dev'))
+}
+
 if (process.platform === 'win32' && os.release().startsWith('6.1')) app.disableHardwareAcceleration()
 if (process.platform === 'win32') app.setAppUserModelId(app.getName())
 

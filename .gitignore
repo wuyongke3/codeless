@@ -27,7 +27,6 @@ build/icons
 *.sw?
 
 # lockfile
-package-lock.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
 yarn.lock

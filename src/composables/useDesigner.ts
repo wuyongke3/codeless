@@ -1,5 +1,5 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
-import type { LowCodeProject, LowCodeWidget, WidgetDataBinding, PageLayout, WidgetEvent, WidgetEventAction, WidgetEventActionType, WidgetEventType, WidgetStyleTokenRefs, WidgetType } from '../types/lowcode'
+import type { LowCodeProject, LowCodeWidget, WidgetColumn, WidgetDataBinding, PageLayout, WidgetEvent, WidgetEventAction, WidgetEventActionType, WidgetEventType, WidgetStyleTokenRefs, WidgetType } from '../types/lowcode'
 import { clone, createWidget, eventOptionsForWidget, makeId, paletteGroups, widgetDefaults, type Area } from './utils'
 import { getWidgetConfig, getWidgetEvents, isContainerType, normalizeWidget, parseColumns, parseOptions, serializeColumns, serializeOptions, setWidgetFrame, syncLegacyProps } from './widgetConfig'
 import type { LayoutPatch } from './layoutHistory'
@@ -10,7 +10,7 @@ import { createDesignerPerformanceModel } from './designer/performance'
 import { createDesignerPersistence, designerPanelWidthLimits, readDesignerPanelWidth, saveDesignerPanelWidth } from './designer/persistence'
 import type { DesignerHistoryOptions } from './designer/collaboration'
 import { useDesignerCanvasViewport } from './designerCanvasViewport'
-import { alignFrames, distributeFrames, getCanvasGuideBounds, smartSnapFrame } from './designer/canvasGuides'
+import { alignFrames, collectReferenceGuides, distributeFrames, getCanvasGuideBounds, getFrameGuideLines, smartSnapFrame } from './designer/canvasGuides'
 import type { CanvasGuideFrame, CanvasGuideLine } from '../types/designerCanvasGuides'
 import {
   componentInstanceCount,
@@ -784,6 +784,34 @@ export function useDesigner(
     return { x: parentPosition.x + content.x, y: parentPosition.y + content.y }
   }
 
+  /** Return the closest visible guide for the edge currently being resized. */
+  function nearestResizeGuide(axis: CanvasGuideLine['axis'], edgePosition: number, guides: readonly CanvasGuideLine[], threshold = 6) {
+    return guides
+      .filter(guide => guide.axis === axis && guide.kind !== 'grid')
+      .map(guide => ({ guide, distance: Math.abs(guide.position - edgePosition) }))
+      .filter(candidate => candidate.distance <= threshold)
+      .sort((left, right) => {
+        if (left.distance !== right.distance) return left.distance - right.distance
+        // Prefer another component to the canvas when both lines are equally close.
+        return left.guide.kind === 'reference' ? -1 : right.guide.kind === 'reference' ? 1 : 0
+      })[0]?.guide
+  }
+
+  function resizeReferenceGuides(widget: LowCodeWidget) {
+    const project = currentProject.value
+    if (!project) return [] as CanvasGuideLine[]
+    const referenceFrames = project.layout.widgets
+      .filter(candidate => candidate.id !== widget.id && !isDescendantOf(candidate.id, widget.id))
+      .map(guideFrameForWidget)
+    return [
+      ...collectReferenceGuides(referenceFrames),
+      ...getFrameGuideLines(
+        { x: 0, y: 0, width: project.layout.canvas.width, height: project.layout.canvas.height },
+        { kind: 'canvas' },
+      ),
+    ]
+  }
+
   function applyAbsoluteFrameResults(widgets: LowCodeWidget[], results: CanvasGuideFrame[]) {
     const resultById = new Map(results.map(frame => [frame.id, frame]))
     const updates = widgets.flatMap(widget => {
@@ -1250,7 +1278,12 @@ export function useDesigner(
     }
     state.deltaX = Math.round(finalDx)
     state.deltaY = Math.round(finalDy)
-    canvasGuideLines.value = showCanvasGuides.value ? activeGuides : []
+    // The permanent grid already communicates grid snapping. Only surface
+    // component/canvas matches as smart guides so the visual feedback is
+    // meaningful while positioning a widget next to another widget.
+    canvasGuideLines.value = showCanvasGuides.value
+      ? activeGuides.filter(guide => guide.kind !== 'grid')
+      : []
     applyWidgetFrameBatch(state.widgets.map(({ widget, originX, originY }) => {
       const next = clampWidgetFrame(widget, originX + finalDx, originY + finalDy)
       return { widget, patch: { x: next.x, y: next.y } }
@@ -1446,10 +1479,55 @@ export function useDesigner(
     }
     const nextWidth = Math.max(minWidth, Math.min(bounds.width, Math.round(width)))
     const nextHeight = Math.max(minHeight, Math.min(bounds.height, Math.round(height)))
-    const nextPosition = clampWidgetFrame(state.widget, x, y, nextWidth, nextHeight)
+    let nextFrame = clampWidgetFrame(state.widget, x, y, nextWidth, nextHeight)
+    const activeGuides: CanvasGuideLine[] = []
+
+    // Resizing changes one or two edges instead of translating a frame. Snap only
+    // those active edges so a guide always describes the actual visible boundary.
+    if (snapEnabled.value && !event.altKey && !event.shiftKey) {
+      const parentOrigin = absoluteParentOrigin(state.widget)
+      const guides = resizeReferenceGuides(state.widget)
+      const snapHorizontalEdge = (edge: 'start' | 'end') => {
+        const absoluteX = parentOrigin.x + nextFrame.x
+        const edgePosition = edge === 'start' ? absoluteX : absoluteX + nextFrame.width
+        const guide = nearestResizeGuide('x', edgePosition, guides)
+        if (!guide) return
+        const target = Math.round(guide.position)
+        const candidate = edge === 'end'
+          ? clampWidgetFrame(state.widget, nextFrame.x, nextFrame.y, target - absoluteX, nextFrame.height)
+          : clampWidgetFrame(state.widget, target - parentOrigin.x, nextFrame.y, absoluteX + nextFrame.width - target, nextFrame.height)
+        const candidateEdge = edge === 'start'
+          ? parentOrigin.x + candidate.x
+          : parentOrigin.x + candidate.x + candidate.width
+        if (candidate.width < minWidth || Math.abs(candidateEdge - target) > 0.01) return
+        nextFrame = candidate
+        activeGuides.push({ ...guide, position: target })
+      }
+      const snapVerticalEdge = (edge: 'start' | 'end') => {
+        const absoluteY = parentOrigin.y + nextFrame.y
+        const edgePosition = edge === 'start' ? absoluteY : absoluteY + nextFrame.height
+        const guide = nearestResizeGuide('y', edgePosition, guides)
+        if (!guide) return
+        const target = Math.round(guide.position)
+        const candidate = edge === 'end'
+          ? clampWidgetFrame(state.widget, nextFrame.x, nextFrame.y, nextFrame.width, target - absoluteY)
+          : clampWidgetFrame(state.widget, nextFrame.x, target - parentOrigin.y, nextFrame.width, absoluteY + nextFrame.height - target)
+        const candidateEdge = edge === 'start'
+          ? parentOrigin.y + candidate.y
+          : parentOrigin.y + candidate.y + candidate.height
+        if (candidate.height < minHeight || Math.abs(candidateEdge - target) > 0.01) return
+        nextFrame = candidate
+        activeGuides.push({ ...guide, position: target })
+      }
+      if (state.handle.includes('e')) snapHorizontalEdge('end')
+      else if (state.handle.includes('w')) snapHorizontalEdge('start')
+      if (state.handle.includes('s')) snapVerticalEdge('end')
+      else if (state.handle.includes('n')) snapVerticalEdge('start')
+    }
+    canvasGuideLines.value = showCanvasGuides.value ? activeGuides : []
     applyWidgetFrameBatch([{
       widget: state.widget,
-      patch: { ...nextPosition, width: nextWidth, height: nextHeight },
+      patch: nextFrame,
     }])
     if (isContainerWidget(state.widget)) clampChildrenToParent(state.widget)
   }
@@ -1488,6 +1566,7 @@ export function useDesigner(
     if (!state?.moved || cancelled) suppressNextWidgetClick = false
     draggingWidgetId.value = ''
     draggingWidgetIds.value = []
+    canvasGuideLines.value = []
     setPointerInteractionActive(false)
     resizeState = null
   }
@@ -1934,6 +2013,20 @@ export function useDesigner(
     syncWidget(selectedWidget.value)
   }
 
+  function updateTableColumns(widget: LowCodeWidget, columns: WidgetColumn[]) {
+    const config = getWidgetConfig(widget)
+    config.content.columns = columns
+      .map(column => ({
+        key: String(column.key || '').trim(),
+        label: String(column.label || column.key || '').trim(),
+        ...(Number.isFinite(Number(column.width)) && Number(column.width) > 0 ? { width: Math.round(Number(column.width)) } : {}),
+        ...(column.align ? { align: column.align } : {}),
+      }))
+      .filter(column => column.key)
+    syncLegacyProps(widget)
+    syncWidget(widget)
+  }
+
   function updateOptions(event: Event) {
     if (!selectedWidget.value) return
     const text = (event.target as HTMLTextAreaElement).value
@@ -2200,7 +2293,7 @@ export function useDesigner(
     startPanelResize, startCanvasSelection, handleCanvasClick, insertWidgets, handleCanvasPanPointerDown, handleCanvasPanPointerMove, handleCanvasPanPointerUp, handleCanvasPanPointerCancel, handleCanvasViewportKeydown, handleCanvasViewportKeyup,
     startWidgetMove, startWidgetResize, removeSelectedWidget, duplicateSelectedWidget, copySelectedWidgets, cutSelectedWidgets, pasteWidgets, renameSelectedWidget, selectAllWidgets, bringToFront, sendToBack, moveSelectedLayer, canMoveSelectedLayer,
     alignSelectedWidgets, distributeSelectedWidgets, toggleCanvasGrid, toggleCanvasSnap,
-    toggleSelectedLocked, toggleSelectedHidden, toggleWidgetLocked, toggleWidgetHidden, createSelectedComponentDefinition, createSelectedComponentInstance, refreshSelectedComponentInstance, detachSelectedComponentInstance, syncWidget, updateWidgetVariant, updateWidgetTokenRef, updateDataSource, updateDataBinding, updateSubmitTarget, updateColumns, updateOptions, serializeWidgetColumns, serializeWidgetOptions, widgetStyle, resetDesigner,
+    toggleSelectedLocked, toggleSelectedHidden, toggleWidgetLocked, toggleWidgetHidden, createSelectedComponentDefinition, createSelectedComponentInstance, refreshSelectedComponentInstance, detachSelectedComponentInstance, syncWidget, updateWidgetVariant, updateWidgetTokenRef, updateDataSource, updateDataBinding, updateSubmitTarget, updateColumns, updateTableColumns, updateOptions, serializeWidgetColumns, serializeWidgetOptions, widgetStyle, resetDesigner,
     addWidgetEvent, removeWidgetEvent, addEventAction, removeEventAction,
   }
 }
