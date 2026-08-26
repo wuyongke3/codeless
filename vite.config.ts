@@ -1,8 +1,15 @@
-﻿import fs from 'node:fs'
+import fs from 'node:fs'
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import electronMulti, { electronSimple } from 'vite-plugin-electron/multi-env'
 import { notBundle } from 'vite-plugin-electron/plugin'
+
+const workspaceAliases = {
+  '@codeless/components': fileURLToPath(new URL('./packages/codeless-components/src/index.ts', import.meta.url)),
+  '@codeless/utils': fileURLToPath(new URL('./packages/codeless-utils/src/index.ts', import.meta.url)),
+  '@codeless/ui': fileURLToPath(new URL('./packages/codeless-ui', import.meta.url)),
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
@@ -13,6 +20,7 @@ export default defineConfig(({ command }) => {
   const sourcemap = isServe || !!process.env.VSCODE_DEBUG
 
   return {
+    resolve: { alias: workspaceAliases },
     plugins: [
       vue(),
       electronSimple({

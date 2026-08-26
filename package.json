@@ -35,7 +35,7 @@
     "build:linux:arm64": "node scripts/build.mjs --linux --arm64",
     "build:linux:all": "node scripts/build.mjs --linux --x64 --arm64",
     "preview": "vite preview",
-    "test:e2e": "npm run build:vite && electron --no-sandbox scripts/e2e-electron.mjs",
+    "test:e2e": "pnpm run build:vite && electron --no-sandbox scripts/e2e-electron.mjs",
     "validate:page-designer": "node scripts/validate-page-designer.mjs",
     "test:page-designer-history": "node --experimental-strip-types scripts/page-designer-history-fixture.mjs",
     "test:page-designer-guides": "node --experimental-strip-types scripts/page-designer-guides-fixture.mjs",
@@ -57,6 +57,8 @@
     "vue-tsc": "^3.3.3"
   },
   "dependencies": {
-    "element-plus": "^2.14.5"
-  }
+    "@codeless/components": "workspace:*",
+    "@codeless/ui": "workspace:*"
+  },
+  "packageManager": "pnpm@11.10.0"
 }

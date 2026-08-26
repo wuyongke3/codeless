@@ -59,7 +59,7 @@ jobs:
       - name: Fail on Restricted Lockfile Changes
         if: ${{ steps.changes.outputs.lockfiles == 'true' }}
         run: |
-          echo "Lockfiles are managed by maintainers and should not be changed in PRs."
+          echo "Legacy lockfiles are not accepted; pnpm-lock.yaml is the repository lockfile."
           echo "Changed lockfiles:"
           echo "${{ steps.changes.outputs.lockfiles_files }}"
           exit 1

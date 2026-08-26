@@ -18,7 +18,12 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    "paths": {
+      "@codeless/components": ["./packages/codeless-components/src/index.ts"],
+      "@codeless/utils": ["./packages/codeless-utils/src/index.ts"],
+      "@codeless/ui/*": ["./packages/codeless-ui/*"]
+    }
   },
-  "include": ["src"],
+  "include": ["src", "packages/*/src"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

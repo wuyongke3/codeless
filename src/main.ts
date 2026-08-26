@@ -1,8 +1,6 @@
-﻿import { createApp } from 'vue'
+import { createApp } from 'vue'
 import App from './App.vue'
-import 'element-plus/dist/index.css'
-import './style.css'
-import './styles/index.css'
+import '@codeless/ui/styles.css'
 
 createApp(App)
   .mount('#app')

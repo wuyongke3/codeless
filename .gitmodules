@@ -1,0 +1,9 @@
+[submodule "codeless-utils"]
+	path = packages/codeless-utils
+	url = https://github.com/wuyongke3/codeless-utils.git
+[submodule "codeless-ui"]
+	path = packages/codeless-ui
+	url = https://github.com/wuyongke3/codeless-ui.git
+[submodule "codeless-components"]
+	path = packages/codeless-components
+	url = https://github.com/wuyongke3/codeless-components.git

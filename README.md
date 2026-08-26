@@ -27,26 +27,26 @@ Codeless 是一个 **完全本地运行** 的低代码平台原型，基于 Elec
 ## 本地运行
 
 ```powershell
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 如果 Electron 二进制尚未下载，可先执行：
 
 ```powershell
-npx install-electron
+pnpm exec install-electron
 ```
 
 ## 构建前端与主进程
 
 ```powershell
-npm run build:vite
+pnpm build:vite
 ```
 
 ## 打包 Windows 应用
 
 ```powershell
-npm run build:win
+pnpm build:win
 ```
 
 ## SQLite 文件位置
@@ -81,8 +81,8 @@ src/styles/*.css                   设计令牌、视图与运行时样式模块
 
 ## 验证结果
 
-- `npm run typecheck` ✅
-- `npm run build:vite` ✅
+- `pnpm typecheck` ✅
+- `pnpm build:vite` ✅
 - Electron 主进程与 preload 已通过构建；运行时会自动创建并初始化 `codeless.sqlite`
 
 ## 组件协议说明
