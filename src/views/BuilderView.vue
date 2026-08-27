@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import BuilderHeader from '../components/builder/BuilderHeader.vue'
@@ -16,7 +16,7 @@ import PublishServiceDialog from '../components/builder/PublishServiceDialog.vue
 import VirtualLayerTree from '../components/VirtualLayerTree.vue'
 import { eventOptionsForWidget, widgetEventActionLabels } from '../composables/utils'
 import { widgetDefinitionMap, type WidgetFieldSchema } from '../components/registry/widgetRegistry'
-import { getWidgetFieldValue, parseOptions, serializeOptions, setWidgetConfigValue } from '../composables/widgetConfig'
+import { getWidgetConfig, getWidgetFieldValue, parseOptions, serializeOptions, setWidgetConfigValue } from '../composables/widgetConfig'
 
 type AppState = Record<string, any>
 const props = defineProps<{ ui: AppState }>()
@@ -95,6 +95,68 @@ function tableActionTargets() {
   return (state.currentProject?.layout?.widgets || []).filter((item: any) =>
     item.type === 'table' && item.config?.data?.source === 'table' && item.config?.data?.table,
   )
+}
+
+function variableBindingName(widget: any) {
+  const config = getWidgetConfig(widget)
+  return config.data.source === 'runtime' ? String(config.data.field || '') : ''
+}
+
+function variableBindingSuggestions() {
+  const names = new Set<string>()
+  for (const widget of state.currentProject?.layout?.widgets || []) {
+    const name = variableBindingName(widget).trim()
+    if (name) names.add(name)
+  }
+  return [...names].sort((left, right) => left.localeCompare(right))
+}
+
+function setVariableBindingEnabled(widget: any, enabled: boolean) {
+  const config = getWidgetConfig(widget)
+  if (enabled) {
+    const fallback = `input_${String(widget.id).replace(/[^a-zA-Z0-9_]/g, '_')}`
+    config.data = { source: 'runtime', field: variableBindingName(widget).trim() || fallback }
+  } else config.data = { source: 'static' }
+  state.syncWidget(widget)
+}
+
+function updateVariableBindingName(widget: any, value: string) {
+  const name = value.trim()
+  const config = getWidgetConfig(widget)
+  config.data = name ? { source: 'runtime', field: name } : { source: 'static' }
+  state.syncWidget(widget)
+}
+
+function actionTargetTable(action: any) {
+  const target = tableActionTargets().find((widget: any) => widget.id === action.target)
+  return target ? state.tables.find((table: any) => table.name === target.config.data.table) : undefined
+}
+
+function actionPayloadObject(action: any) {
+  if (!action.payload?.trim()) return {} as Record<string, string>
+  try {
+    const parsed = JSON.parse(action.payload)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, string> : {}
+  } catch {
+    return {}
+  }
+}
+
+function actionFieldValue(action: any, fieldName: string) {
+  const value = actionPayloadObject(action)[fieldName]
+  return value === undefined || value === null ? '' : String(value)
+}
+
+function updateActionFieldValue(action: any, fieldName: string, value: string) {
+  const payload = actionPayloadObject(action)
+  if (value.trim()) payload[fieldName] = value
+  else delete payload[fieldName]
+  action.payload = Object.keys(payload).length ? JSON.stringify(payload) : ''
+  state.markDirty()
+}
+
+function actionPayloadInvalid(action: any) {
+  return Boolean(action.payload?.trim()) && !Object.keys(actionPayloadObject(action)).length && action.payload.trim() !== '{}'
 }
 
 function actionTargetPlaceholder(type: string) {
@@ -330,6 +392,15 @@ onBeforeUnmount(() => {
             <label v-if="['button', 'input', 'select', 'table', 'stat', 'image'].includes(state.selectedWidget.type)" class="property-field"><span>圆角</span><div class="unit-input"><input v-model.number="state.selectedWidget.config.style.borderRadius" type="number" min="0" max="40" @input="state.syncWidget(state.selectedWidget)" /><em>px</em></div></label>
           </section>
           <section class="property-section"><div class="property-title"><span>布局与图层</span><AppIcon name="chevron-down" :size="14" /></div><div class="position-grid"><label><span>X</span><input v-model.number="state.selectedWidget.config.layout.x" type="number" @input="state.syncWidget(state.selectedWidget)" /></label><label><span>Y</span><input v-model.number="state.selectedWidget.config.layout.y" type="number" @input="state.syncWidget(state.selectedWidget)" /></label><label><span>W</span><input v-model.number="state.selectedWidget.config.layout.width" type="number" min="24" @input="state.syncWidget(state.selectedWidget)" /></label><label><span>H</span><input v-model.number="state.selectedWidget.config.layout.height" type="number" min="24" @input="state.syncWidget(state.selectedWidget)" /></label></div><label class="property-check layer-check"><input v-model="state.selectedWidget.config.layout.locked" type="checkbox" @change="state.syncWidget(state.selectedWidget)" /><span><i><AppIcon name="lock" :size="11" /></i>锁定组件，禁止拖拽和调整</span></label><label class="property-check layer-check"><input v-model="state.selectedWidget.config.layout.hidden" type="checkbox" @change="state.syncWidget(state.selectedWidget)" /><span><i><AppIcon name="eye" :size="11" /></i>在预览中隐藏</span></label></section>
+          <section v-if="state.selectedWidget.type === 'input'" class="property-section input-variable-binding">
+            <div class="property-title"><span>变量绑定</span><AppIcon name="link" :size="14" /></div>
+            <label class="property-check layer-check"><input :checked="Boolean(variableBindingName(state.selectedWidget))" type="checkbox" @change="setVariableBindingEnabled(state.selectedWidget, ($event.target as HTMLInputElement).checked)" /><span><i><AppIcon name="link" :size="11" /></i>将输入值同步到变量</span></label>
+            <template v-if="variableBindingName(state.selectedWidget)">
+              <label class="property-field"><span>变量名</span><input :value="variableBindingName(state.selectedWidget)" list="input-variable-options" placeholder="例如 customerName" @change="updateVariableBindingName(state.selectedWidget, ($event.target as HTMLInputElement).value)" /></label>
+              <datalist id="input-variable-options"><option v-for="name in variableBindingSuggestions()" :key="name" :value="name" /></datalist>
+              <small class="field-help" v-pre>相同变量名的输入框会实时同步。新增数据时可使用 {{ form.变量名 }}，变量名与数据字段相同时会自动匹配。</small>
+            </template>
+          </section>
           <WidgetDataBindingPanel
             v-if="state.selectedWidget.type !== 'table' && componentDefinition(state.selectedWidget.type).capabilities.dataBinding"
             :widget="state.selectedWidget"
@@ -380,7 +451,17 @@ onBeforeUnmount(() => {
                 <input v-if="['setValue', 'showToast'].includes(action.type)" class="event-action-value" v-model="action.value" :placeholder="action.type === 'setValue' ? '可用 {{ value }} / {{ row.id }}' : '提示文本，支持 {{ value }} / {{ row.name }}'" @input="state.markDirty()" />
                 <input v-if="action.type === 'navigate'" class="event-action-payload" v-model="action.payload" placeholder='路由参数 JSON，例如 {"id":"{{ row.id }}"}' @input="state.markDirty()" />
                 <input v-else-if="['setRouteState', 'emitPageEvent'].includes(action.type)" class="event-action-payload" v-model="action.payload" placeholder="值或 JSON / 模板" @input="state.markDirty()" />
-                <input v-else-if="['tableCreate', 'tableUpdate'].includes(action.type)" class="event-action-payload" v-model="action.payload" placeholder='可选 JSON，例如 {"status":"已处理","owner":"{{ form.owner }}"}' @input="state.markDirty()" />
+                <div v-else-if="['tableCreate', 'tableUpdate'].includes(action.type)" class="event-action-record">
+                  <div class="event-action-record-head"><strong>{{ action.type === 'tableCreate' ? '新增数据' : '更新数据' }}</strong><small v-pre>填写字段值，支持 {{ form.变量名 }} 与 {{ row.字段名 }}</small></div>
+                  <template v-if="actionTargetTable(action)?.fields?.length">
+                    <label v-for="field in actionTargetTable(action).fields.filter((item: any) => !item.isPrimaryKey)" :key="field.name" class="event-action-record-field">
+                      <span><strong>{{ field.description || field.name }}</strong><small>{{ field.name }} · {{ field.type }}</small></span>
+                      <input :value="actionFieldValue(action, field.name)" :placeholder="`留空时自动匹配 ${field.name}`" @input="updateActionFieldValue(action, field.name, ($event.target as HTMLInputElement).value)" />
+                    </label>
+                  </template>
+                  <small v-else class="event-action-note">请先选择已绑定数据源的目标表格。</small>
+                  <details class="event-action-json"><summary :class="{ danger: actionPayloadInvalid(action) }">高级 JSON 覆盖</summary><textarea v-model="action.payload" rows="3" placeholder='例如 {"status":"已处理","owner":"{{ form.owner }}"}' @input="state.markDirty()"></textarea></details>
+                </div>
                 <small v-else-if="action.type === 'tableDelete'" class="event-action-note">删除目标表格中当前选中的记录</small>
                 <button class="icon-button tiny danger-text event-action-remove" @click="state.removeEventAction(event.id, action.id)"><AppIcon name="close" :size="13" /></button>
               </div>

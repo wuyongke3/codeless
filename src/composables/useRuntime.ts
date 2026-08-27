@@ -62,19 +62,30 @@ function appendNavigationParams(target: string, params: Record<string, unknown>)
 
 export function useRuntime(options: RuntimeOptions) {
   const runtimeValues = reactive<Record<string, string>>({})
+  // 变量绑定使用独立的运行时值池，多个输入框使用同一变量名时会自动同步。
+  const runtimeVariables = reactive<Record<string, string>>({})
   const serviceVisibility = reactive<Record<string, boolean>>({})
   // 防止生命周期动作再次打开/关闭同一个服务组件时产生递归调用。
   const serviceTransitioningIds = new Set<string>()
   const tableSelections = reactive<Record<string, Record<string, unknown>>>({})
   const tableRefreshKeys = reactive<Record<string, number>>({})
 
+  function runtimeVariableName(widget: LowCodeWidget) {
+    const config = getWidgetConfig(widget)
+    return config.data.source === 'runtime' ? String(config.data.field || '').trim() : ''
+  }
+
   function getWidgetValue(widget: LowCodeWidget) {
     const config = getWidgetConfig(widget)
+    const variableName = runtimeVariableName(widget)
+    if (variableName && runtimeVariables[variableName] !== undefined) return runtimeVariables[variableName]
     return runtimeValues[widget.id] ?? String(config.content.value ?? config.content.defaultValue ?? '')
   }
 
   function updateWidgetValue(widget: LowCodeWidget, value: string) {
     runtimeValues[widget.id] = value
+    const variableName = runtimeVariableName(widget)
+    if (variableName) runtimeVariables[variableName] = value
   }
 
   function isServiceVisible(widget: LowCodeWidget) {
@@ -129,6 +140,7 @@ export function useRuntime(options: RuntimeOptions) {
 
   function resetRuntimeValues() {
     for (const key of Object.keys(runtimeValues)) delete runtimeValues[key]
+    for (const key of Object.keys(runtimeVariables)) delete runtimeVariables[key]
     for (const key of Object.keys(serviceVisibility)) delete serviceVisibility[key]
     for (const key of Object.keys(tableSelections)) delete tableSelections[key]
     for (const key of Object.keys(tableRefreshKeys)) delete tableRefreshKeys[key]
@@ -202,7 +214,10 @@ export function useRuntime(options: RuntimeOptions) {
     }
     if (action.type === 'setValue') {
       if (!action.target) return
-      runtimeValues[action.target] = resolveValue(action.value, payload, values)
+      const value = resolveValue(action.value, payload, values)
+      const targetWidget = options.currentProject.value?.layout.widgets.find(widget => widget.id === action.target)
+      if (targetWidget) updateWidgetValue(targetWidget, value)
+      else runtimeValues[action.target] = value
       return
     }
     if (action.type === 'submitData') {
@@ -313,7 +328,7 @@ export function useRuntime(options: RuntimeOptions) {
   }
 
   return {
-    runtimeValues, serviceVisibility, tableSelections, tableRefreshKeys,
+    runtimeValues, runtimeVariables, serviceVisibility, tableSelections, tableRefreshKeys,
     getWidgetValue, updateWidgetValue, isServiceVisible, setServiceVisible,
     selectTableRow, getSelectedTableRow, clearTableSelection, refreshTableWidget, getTableRefreshKey,
     collectFormValues, validateForm, resetRuntimeValues, executeWidgetEvent,
