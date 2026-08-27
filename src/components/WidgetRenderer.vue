@@ -21,6 +21,8 @@ const props = withDefaults(defineProps<{
   onEvent?: RuntimeEventHandler
   onValueChange?: RuntimeValueChangeHandler
   serviceVisible?: boolean
+  selectedRow?: Record<string, unknown>
+  dataRefreshKey?: number
 }>(), {
   runtime: false,
 })
@@ -161,6 +163,8 @@ watchEffect((onCleanup) => {
   let active = true
   onCleanup(() => { active = false })
 
+  // 运行时动作会递增该 key，触发当前表格重新查询而不影响其他组件。
+  void props.dataRefreshKey
   const dataSource = config.value.data
   const queryRows = window.lowcode?.queryRows
   if (!dataBindingEnabled.value || !dataSource.table || !queryRows) {
@@ -343,6 +347,20 @@ function handleClick() {
   void emitEvent('click')
 }
 
+function rowIdentity(row: Record<string, unknown>) {
+  for (const key of ['id', '_id', 'uuid']) {
+    if (row[key] !== undefined && row[key] !== null) return `${key}:${String(row[key])}`
+  }
+  return undefined
+}
+
+function isSelectedRow(row: Record<string, unknown>) {
+  if (!props.selectedRow) return false
+  const currentIdentity = rowIdentity(row)
+  const selectedIdentity = rowIdentity(props.selectedRow)
+  return currentIdentity && selectedIdentity ? currentIdentity === selectedIdentity : row === props.selectedRow
+}
+
 function handleRowClick(row: Record<string, unknown>, index: number) {
   void emitEvent('rowClick', { row, index })
 }
@@ -471,7 +489,7 @@ function containerStyle() {
       <div v-if="runtimeLoading" class="table-empty"><AppIcon name="database" :size="18" /><span>正在加载数据…</span></div>
       <div v-else-if="runtimeError" class="table-empty error"><AppIcon name="close" :size="18" /><span>{{ runtimeError }}</span></div>
       <div v-else-if="!runtimeRows.length" class="table-empty"><AppIcon name="database" :size="18" /><span>暂无数据</span></div>
-      <div v-else v-for="(row, ri) in runtimeRows" :key="ri" class="render-table-row" :style="tableGridStyle()" @click.stop="handleRowClick(row, ri)">
+      <div v-else v-for="(row, ri) in runtimeRows" :key="ri" :class="['render-table-row', { 'is-selected': isSelectedRow(row) }]" :style="tableGridStyle()" @click.stop="handleRowClick(row, ri)">
         <span v-for="(column, ci) in tableDisplayColumns" :key="column.key" :style="cellStyle(column)">
           <template v-if="column.key === '__index'">{{ ri + 1 }}</template>
           <template v-else-if="ci === 0 || (!config.content.showIndex && ci === 0)"><b class="table-avatar" :style="{ background: `${config.style.accent || '#665cf6'}18`, color: config.style.accent || '#665cf6' }">{{ String(cellValue(row, column, ci)).slice(0, 1) }}</b>{{ cellValue(row, column, ci) }}</template>

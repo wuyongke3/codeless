@@ -129,9 +129,17 @@ export function useDataModel(
     }
   }
 
-  async function submitValuesToTable(targetTable: string, values: Record<string, unknown>, mapping: Record<string, string> = {}) {
-    if (!targetTable || !currentProject.value || (!window.lowcode?.submitForm && !window.lowcode?.insertRow)) return false
-    const targetMeta = tables.value.find(table => table.name === targetTable)
+  async function resolveTargetTable(targetTable: string) {
+    let targetMeta = tables.value.find(table => table.name === targetTable)
+    if (!targetMeta) {
+      await loadTables()
+      targetMeta = tables.value.find(table => table.name === targetTable)
+    }
+    return targetMeta
+  }
+
+  function buildTableRowData(targetMeta: TableMeta | undefined, values: Record<string, unknown>, mapping: Record<string, string> = {}) {
+    if (!currentProject.value || !targetMeta) return {}
     const normalize = (value: string) => value.trim().toLowerCase().replace(/[\s_-]+/g, '')
     const aliases: Record<string, string[]> = {
       name: ['姓名', '名称', '客户名称', '客户名'],
@@ -151,13 +159,26 @@ export function useDataModel(
       const config = getWidgetConfig(widget)
       const label = String(config.content.label || config.content.text || widget.name || '')
       const normalizedLabel = normalize(label)
-      const byDescription = targetMeta?.fields.find(field => normalize(field.description) === normalizedLabel)
-      const byName = targetMeta?.fields.find(field => normalize(field.name) === normalizedLabel)
-      const byAlias = targetMeta?.fields.find(field => aliases[field.name]?.some(alias => normalize(alias) === normalizedLabel))
+      const byDescription = targetMeta.fields.find(field => normalize(field.description) === normalizedLabel)
+      const byName = targetMeta.fields.find(field => normalize(field.name) === normalizedLabel)
+      const byAlias = targetMeta.fields.find(field => aliases[field.name]?.some(alias => normalize(alias) === normalizedLabel))
       const mappedName = mapping[widget.id] || config.data.field
-      const fieldName = targetMeta?.fields.find(field => field.name === mappedName)?.name || byDescription?.name || byName?.name || byAlias?.name
+      const fieldName = targetMeta.fields.find(field => field.name === mappedName)?.name || byDescription?.name || byName?.name || byAlias?.name
       if (fieldName) data[fieldName] = values[widget.id] ?? (config.data.field ? values[config.data.field] : undefined) ?? config.content.value ?? config.content.defaultValue ?? ''
     }
+    return data
+  }
+
+  function primaryKeyValue(targetMeta: TableMeta, row: Record<string, unknown>) {
+    const primaryKey = targetMeta.fields.find(field => field.isPrimaryKey)?.name
+    const key = primaryKey || ['id', '_id', 'uuid'].find(candidate => row[candidate] !== undefined && row[candidate] !== null)
+    return key ? { key, value: row[key] } : null
+  }
+
+  async function submitValuesToTable(targetTable: string, values: Record<string, unknown>, mapping: Record<string, string> = {}) {
+    if (!targetTable || !currentProject.value || (!window.lowcode?.submitForm && !window.lowcode?.insertRow)) return false
+    const targetMeta = await resolveTargetTable(targetTable)
+    const data = buildTableRowData(targetMeta, values, mapping)
     if (!Object.keys(data).length) {
       notify('未找到可提交的表单字段', 'info')
       return false
@@ -170,6 +191,81 @@ export function useDataModel(
     } catch (error) {
       console.error(error)
       notify('提交失败', 'danger')
+      return false
+    }
+  }
+
+  async function executeWidgetTableMutation(
+    operation: 'create' | 'update' | 'delete',
+    tableName: string,
+    values: Record<string, unknown>,
+    selectedRow?: Record<string, unknown>,
+    payload: Record<string, unknown> = {},
+  ) {
+    if (!tableName || !window.lowcode) return false
+    const targetMeta = await resolveTargetTable(tableName)
+    if (!targetMeta) {
+      notify('未找到目标数据表', 'danger')
+      return false
+    }
+
+    const primaryKey = targetMeta.fields.find(field => field.isPrimaryKey)?.name
+    const formData = buildTableRowData(targetMeta, values)
+    const data = { ...formData, ...payload }
+    if (primaryKey) delete data[primaryKey]
+
+    if (operation === 'create') {
+      if (!window.lowcode.insertRow) return false
+      if (!Object.keys(data).length) {
+        notify('请先绑定表单字段，或在动作中填写 JSON 数据', 'info')
+        return false
+      }
+      try {
+        await window.lowcode.insertRow({ table: tableName, data })
+        notify('记录已新增')
+        return true
+      } catch (error) {
+        console.error(error)
+        notify('新增失败', 'danger')
+        return false
+      }
+    }
+
+    if (!selectedRow) {
+      notify('请先点击目标表格中的一条记录', 'info')
+      return false
+    }
+    const rowIdentifier = primaryKeyValue(targetMeta, selectedRow)
+    if (!rowIdentifier || rowIdentifier.value === undefined || rowIdentifier.value === null) {
+      notify('当前记录缺少主键，无法执行此操作', 'danger')
+      return false
+    }
+
+    if (operation === 'update') {
+      if (!window.lowcode.updateRow) return false
+      if (!Object.keys(data).length) {
+        notify('请先绑定表单字段，或在动作中填写 JSON 数据', 'info')
+        return false
+      }
+      try {
+        await window.lowcode.updateRow({ table: tableName, id: rowIdentifier.value, data })
+        notify('记录已更新')
+        return true
+      } catch (error) {
+        console.error(error)
+        notify('更新失败', 'danger')
+        return false
+      }
+    }
+
+    if (!window.lowcode.deleteRow) return false
+    try {
+      await window.lowcode.deleteRow(tableName, rowIdentifier.value)
+      notify('记录已删除', 'info')
+      return true
+    } catch (error) {
+      console.error(error)
+      notify('删除失败', 'danger')
       return false
     }
   }
@@ -187,6 +283,6 @@ export function useDataModel(
   return {
     selectedTableId, selectedTable, tables, tableRows, tableColumns, tableTotal, tableLoading, tablePage,
     showRowEditor, editingRow, newRowData, loadTables, loadTableRows, insertTableRow, updateTableRow,
-    deleteTableRow, loadWidgetData, submitValuesToTable, submitFormToTable,
+    deleteTableRow, loadWidgetData, submitValuesToTable, executeWidgetTableMutation, submitFormToTable,
   }
 }

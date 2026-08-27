@@ -38,7 +38,7 @@ export type WidgetType =
 
 export type DataSourceMode = 'list' | 'single' | 'count' | 'aggregate'
 export type WidgetEventType = 'click' | 'change' | 'submit' | 'rowClick' | 'open' | 'close' | 'confirm' | 'cancel'
-export type WidgetEventActionType = 'navigate' | 'navigateBack' | 'setRouteState' | 'emitPageEvent' | 'setValue' | 'submitData' | 'showToast' | 'showModal' | 'hideModal' | 'showLoading' | 'hideLoading'
+export type WidgetEventActionType = 'navigate' | 'navigateBack' | 'setRouteState' | 'emitPageEvent' | 'setValue' | 'submitData' | 'tableQuery' | 'tableCreate' | 'tableUpdate' | 'tableDelete' | 'showToast' | 'showModal' | 'hideModal' | 'showLoading' | 'hideLoading'
 export type WidgetValueType = 'text' | 'number' | 'email' | 'phone' | 'date' | 'datetime' | 'boolean'
 export type WidgetImageFit = 'cover' | 'contain' | 'fill' | 'none'
 export type WidgetAggregateFunction = 'count' | 'sum' | 'avg' | 'min' | 'max'

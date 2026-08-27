@@ -331,6 +331,7 @@ export function useLowcode() {
     currentProject,
     notify,
     submitData: (table, values) => dataModel.submitValuesToTable(table, values),
+    executeTableMutation: (operation, table, values, selectedRow, payload) => dataModel.executeWidgetTableMutation(operation, table, values, selectedRow, payload),
     navigate,
     navigateBack: () => appRouter?.navigateBack(),
     setRouteState: (target, value) => appRouter?.setRouteState(target, value),

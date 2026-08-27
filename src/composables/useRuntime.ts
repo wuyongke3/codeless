@@ -12,6 +12,13 @@ interface RuntimeOptions {
   currentProject: ComputedRef<LowCodeProject | undefined>
   notify: (message: string, tone?: 'success' | 'info' | 'danger') => void
   submitData: (table: string, values: Record<string, unknown>) => Promise<boolean>
+  executeTableMutation: (
+    operation: 'create' | 'update' | 'delete',
+    table: string,
+    values: Record<string, unknown>,
+    selectedRow?: Record<string, unknown>,
+    payload?: Record<string, unknown>,
+  ) => Promise<boolean>
   navigate: (target: string) => boolean | void | Promise<boolean | void>
   navigateBack?: () => void | Promise<boolean | void>
   setRouteState?: (target: string | Record<string, unknown>, value?: unknown) => void
@@ -56,6 +63,8 @@ function appendNavigationParams(target: string, params: Record<string, unknown>)
 export function useRuntime(options: RuntimeOptions) {
   const runtimeValues = reactive<Record<string, string>>({})
   const serviceVisibility = reactive<Record<string, boolean>>({})
+  const tableSelections = reactive<Record<string, Record<string, unknown>>>({})
+  const tableRefreshKeys = reactive<Record<string, number>>({})
 
   function getWidgetValue(widget: LowCodeWidget) {
     const config = getWidgetConfig(widget)
@@ -75,6 +84,35 @@ export function useRuntime(options: RuntimeOptions) {
     serviceVisibility[widgetId] = visible
   }
 
+  function selectTableRow(widgetId: string, row: Record<string, unknown>) {
+    tableSelections[widgetId] = row
+  }
+
+  function getSelectedTableRow(widgetId: string) {
+    return tableSelections[widgetId]
+  }
+
+  function clearTableSelection(widgetId: string) {
+    delete tableSelections[widgetId]
+  }
+
+  function refreshTableWidget(widgetId: string) {
+    tableRefreshKeys[widgetId] = (tableRefreshKeys[widgetId] || 0) + 1
+  }
+
+  function getTableRefreshKey(widgetId: string) {
+    return tableRefreshKeys[widgetId] || 0
+  }
+
+  function tableActionTarget(widgetId: string | undefined) {
+    if (!widgetId) return undefined
+    const widget = options.currentProject.value?.layout.widgets.find(item => item.id === widgetId)
+    if (!widget || widget.type !== 'table') return undefined
+    const config = getWidgetConfig(widget)
+    if (config.data.source !== 'table' || !config.data.table) return undefined
+    return { widget, table: config.data.table }
+  }
+
   function collectFormValues() {
     const values: Record<string, unknown> = {}
     for (const widget of options.currentProject.value?.layout.widgets || []) {
@@ -90,6 +128,8 @@ export function useRuntime(options: RuntimeOptions) {
   function resetRuntimeValues() {
     for (const key of Object.keys(runtimeValues)) delete runtimeValues[key]
     for (const key of Object.keys(serviceVisibility)) delete serviceVisibility[key]
+    for (const key of Object.keys(tableSelections)) delete tableSelections[key]
+    for (const key of Object.keys(tableRefreshKeys)) delete tableRefreshKeys[key]
   }
 
   function validateForm() {
@@ -167,6 +207,32 @@ export function useRuntime(options: RuntimeOptions) {
       if (action.target) await options.submitData(action.target, values)
       return
     }
+    if (action.type === 'tableQuery' || action.type === 'tableCreate' || action.type === 'tableUpdate' || action.type === 'tableDelete') {
+      const target = tableActionTarget(action.target)
+      if (!target) {
+        options.notify('请在动作中选择已绑定数据源的目标表格', 'danger')
+        return
+      }
+      if (action.type === 'tableQuery') {
+        refreshTableWidget(target.widget.id)
+        options.notify('表格数据已刷新')
+        return
+      }
+      const selectedRow = getSelectedTableRow(target.widget.id)
+      // 按钮事件本身没有行参数时，使用目标表格的当前选中行解析 {{ row.xxx }} 模板。
+      const templatePayload = selectedRow ? { ...payload, row: selectedRow } : payload
+      const actionPayload = parseActionPayload(action.payload, templatePayload, values)
+      if (actionPayload !== undefined && (actionPayload === null || Array.isArray(actionPayload) || typeof actionPayload !== 'object')) {
+        options.notify('表格动作的数据必须是 JSON 对象', 'danger')
+        return
+      }
+      const operation = action.type === 'tableCreate' ? 'create' : action.type === 'tableUpdate' ? 'update' : 'delete'
+      const succeeded = await options.executeTableMutation(operation, target.table, values, selectedRow, actionPayload as Record<string, unknown> | undefined)
+      if (!succeeded) return
+      if (operation === 'delete') clearTableSelection(target.widget.id)
+      refreshTableWidget(target.widget.id)
+      return
+    }
     if (action.type === 'showToast') {
       options.notify(resolveValue(action.value, payload, values) || '操作已完成', 'info')
       return
@@ -183,6 +249,7 @@ export function useRuntime(options: RuntimeOptions) {
   }
 
   async function executeWidgetEvent(widget: LowCodeWidget, eventType: WidgetEventType, payload: RuntimeEventPayload = {}) {
+    if (eventType === 'rowClick' && widget.type === 'table' && payload.row) selectTableRow(widget.id, payload.row)
     if (eventType === 'submit' && !validateForm()) return
     const configuredEvents = getWidgetEvents(widget).filter(event => event.event === eventType && event.enabled !== false)
     const config = getWidgetConfig(widget)
@@ -200,8 +267,9 @@ export function useRuntime(options: RuntimeOptions) {
   }
 
   return {
-    runtimeValues, serviceVisibility,
+    runtimeValues, serviceVisibility, tableSelections, tableRefreshKeys,
     getWidgetValue, updateWidgetValue, isServiceVisible, setServiceVisible,
+    selectTableRow, getSelectedTableRow, clearTableSelection, refreshTableWidget, getTableRefreshKey,
     collectFormValues, validateForm, resetRuntimeValues, executeWidgetEvent,
   }
 }

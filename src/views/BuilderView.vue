@@ -85,9 +85,22 @@ function updateCurrentPageRoute(event: Event) {
   state.updatePagePath(pageId, (event.target as HTMLInputElement).value)
 }
 
+const tableCrudActionTypes = new Set(['tableQuery', 'tableCreate', 'tableUpdate', 'tableDelete'])
+
+function isTableCrudAction(type: string) {
+  return tableCrudActionTypes.has(type)
+}
+
+function tableActionTargets() {
+  return (state.currentProject?.layout?.widgets || []).filter((item: any) =>
+    item.type === 'table' && item.config?.data?.source === 'table' && item.config?.data?.table,
+  )
+}
+
 function actionTargetPlaceholder(type: string) {
-  if (type === 'setValue') return 'Select the component to update'
-  if (type === 'submitData') return 'Select the data table to submit'
+  if (type === 'setValue') return '选择要更新的组件'
+  if (type === 'submitData') return '选择要提交的数据表'
+  if (isTableCrudAction(type)) return '选择已绑定数据源的表格'
   if (type === 'navigateBack') return 'Return to the previous page'
   if (type === 'setRouteState') return 'State key, e.g. selectedId or shared.userId'
   if (type === 'emitPageEvent') return 'Event name, e.g. customer.updated'
@@ -347,6 +360,10 @@ onBeforeUnmount(() => {
                   <option value="">选择提交的数据表</option>
                   <option v-for="table in state.tables" :key="table.name" :value="table.name">{{ table.title }}（{{ table.name }}）</option>
                 </select>
+                <select v-else-if="isTableCrudAction(action.type)" class="event-action-target" v-model="action.target" @change="state.markDirty()">
+                  <option value="">选择目标表格</option>
+                  <option v-for="targetWidget in tableActionTargets()" :key="targetWidget.id" :value="targetWidget.id">{{ targetWidget.name }}（{{ targetWidget.config.data.table }}）</option>
+                </select>
                 <select v-else-if="action.type === 'showModal' || action.type === 'hideModal'" class="event-action-target" v-model="action.target" @change="state.markDirty()">
                   <option value="">全部弹窗</option>
                   <option v-for="service in state.currentProject.layout.widgets.filter((item: any) => item.type === 'modal')" :key="service.id" :value="service.id">{{ service.name }}</option>
@@ -363,11 +380,13 @@ onBeforeUnmount(() => {
                 <input v-if="['setValue', 'showToast'].includes(action.type)" class="event-action-value" v-model="action.value" :placeholder="action.type === 'setValue' ? '可用 {{ value }} / {{ row.id }}' : '提示文本，支持 {{ value }} / {{ row.name }}'" @input="state.markDirty()" />
                 <input v-if="action.type === 'navigate'" class="event-action-payload" v-model="action.payload" placeholder='路由参数 JSON，例如 {"id":"{{ row.id }}"}' @input="state.markDirty()" />
                 <input v-else-if="['setRouteState', 'emitPageEvent'].includes(action.type)" class="event-action-payload" v-model="action.payload" placeholder="值或 JSON / 模板" @input="state.markDirty()" />
+                <input v-else-if="['tableCreate', 'tableUpdate'].includes(action.type)" class="event-action-payload" v-model="action.payload" placeholder='可选 JSON，例如 {"status":"已处理","owner":"{{ form.owner }}"}' @input="state.markDirty()" />
+                <small v-else-if="action.type === 'tableDelete'" class="event-action-note">删除目标表格中当前选中的记录</small>
                 <button class="icon-button tiny danger-text event-action-remove" @click="state.removeEventAction(event.id, action.id)"><AppIcon name="close" :size="13" /></button>
               </div>
             </div><button class="event-add-action" @click="state.addEventAction(event.id)"><AppIcon name="plus" :size="13" />添加动作</button>
           </article>
-          <div class="events-tip"><AppIcon name="info" :size="13" /><span v-pre>事件支持使用数据模板，例如 {{ row.field }}；表单字段使用 {{ form.field }}。</span></div>
+          <div class="events-tip"><AppIcon name="info" :size="13" /><span v-pre>事件支持使用数据模板，例如 {{ row.field }}；表单字段使用 {{ form.field }}。更新、删除前请先点击表格行选中记录。</span></div>
         </div>
         <div class="inspector-actions"><button @click="state.duplicateSelectedWidget"><AppIcon name="copy" :size="15" />复制</button><button @click="state.bringToFront"><AppIcon name="layers" :size="15" />置顶</button><button @click="state.toggleSelectedLocked"><AppIcon name="lock" :size="15" />锁定</button><button class="danger" @click="state.removeSelectedWidget"><AppIcon name="trash" :size="15" />删除</button></div>
       </template>

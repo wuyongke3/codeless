@@ -903,7 +903,7 @@ async function main() {
     assert.equal(new Set(ids).size, ids.length, '批量添加后组件 ID 重复')
   })
 
-  await runCase('Element Plus component rendering', async () => {
+  await runCase('通用组件渲染', async () => {
     const expected = {
       badge: '.render-badge', tag: '.render-tag', alert: '.render-alert', progress: '.render-progress',
       switch: '.render-switch', checkbox: '.render-choice input[type="checkbox"]', radio: '.render-choice input[type="radio"]',

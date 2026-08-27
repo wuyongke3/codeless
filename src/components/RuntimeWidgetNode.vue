@@ -16,7 +16,7 @@ const isContainer = computed(() => isContainerType(props.widget.type))
 
 <template>
   <div v-show="!widget.config?.layout?.hidden" :data-runtime-widget-id="widget.id" :class="['runtime-widget-node', `widget-${widget.type}`]" :style="state.widgetStyle(widget)">
-    <WidgetRenderer :widget="widget" :design-system="state.currentProject?.designSystem" :runtime="true" :runtime-value="state.getWidgetValue(widget)" :on-event="state.executeWidgetEvent" :on-value-change="state.updateWidgetValue" :service-visible="state.isServiceVisible(widget)">
+    <WidgetRenderer :widget="widget" :design-system="state.currentProject?.designSystem" :runtime="true" :runtime-value="state.getWidgetValue(widget)" :on-event="state.executeWidgetEvent" :on-value-change="state.updateWidgetValue" :service-visible="state.isServiceVisible(widget)" :selected-row="state.getSelectedTableRow(widget.id)" :data-refresh-key="state.getTableRefreshKey(widget.id)">
       <template v-if="isContainer" #children>
         <div class="runtime-children-layer">
           <RuntimeWidgetNode v-for="child in children" :key="child.id" :widget="child" :widgets="widgets" :state="state" />
