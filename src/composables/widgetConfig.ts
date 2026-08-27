@@ -109,6 +109,8 @@ export function createWidgetConfig(type: WidgetType, x: number, y: number, w: nu
     alt: props.alt || props.text,
     title: type === 'modal' ? (props.text || '确认操作') : undefined,
     visible: type === 'modal' || type === 'loading' ? false : undefined,
+    showConfirmButton: type === 'modal' ? true : undefined,
+    showCancelButton: type === 'modal' ? true : undefined,
     confirmText: type === 'modal' ? '确定' : undefined,
     cancelText: type === 'modal' ? '取消' : undefined,
     closeOnOverlay: type === 'modal' || type === 'drawer' ? true : undefined,
@@ -187,6 +189,11 @@ function ensureWidgetConfigShape(config: WidgetConfig, type?: WidgetType): Widge
   config.layout.locked = typeof config.layout.locked === 'boolean' ? config.layout.locked : false
   config.layout.hidden = typeof config.layout.hidden === 'boolean' ? config.layout.hidden : false
   config.content.options = Array.isArray(config.content.options) ? config.content.options : []
+  if (type === 'modal') {
+    // 旧项目没有按钮开关时保持原有行为：默认显示两个操作按钮。
+    if (typeof config.content.showConfirmButton !== 'boolean') config.content.showConfirmButton = true
+    if (typeof config.content.showCancelButton !== 'boolean') config.content.showCancelButton = true
+  }
   if (!config.variant && config.content.variant) config.variant = config.content.variant
   if (config.variant && !config.content.variant) config.content.variant = config.variant
   if (type === 'button' && config.variant === 'primary' && !config.variants && config.content.text !== undefined) config.variants = buttonVariants

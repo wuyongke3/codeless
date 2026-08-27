@@ -18,10 +18,12 @@ export const widgetEventTypeLabels: Record<WidgetEventType, string> = {
   change: '值变化时',
   submit: '提交时',
   rowClick: '行点击时',
-  open: '打开时',
-  close: '关闭时',
-  confirm: '确认时',
-  cancel: '取消时',
+  beforeOpen: '打开前',
+  open: '打开后',
+  beforeClose: '关闭前',
+  close: '关闭后',
+  confirm: '点击确定',
+  cancel: '点击取消',
 }
 
 export const widgetEventActionLabels: Record<WidgetEventActionType, string> = {

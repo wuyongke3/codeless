@@ -37,7 +37,7 @@ export type WidgetType =
   | 'drawer'
 
 export type DataSourceMode = 'list' | 'single' | 'count' | 'aggregate'
-export type WidgetEventType = 'click' | 'change' | 'submit' | 'rowClick' | 'open' | 'close' | 'confirm' | 'cancel'
+export type WidgetEventType = 'click' | 'change' | 'submit' | 'rowClick' | 'beforeOpen' | 'open' | 'beforeClose' | 'close' | 'confirm' | 'cancel'
 export type WidgetEventActionType = 'navigate' | 'navigateBack' | 'setRouteState' | 'emitPageEvent' | 'setValue' | 'submitData' | 'tableQuery' | 'tableCreate' | 'tableUpdate' | 'tableDelete' | 'showToast' | 'showModal' | 'hideModal' | 'showLoading' | 'hideLoading'
 export type WidgetValueType = 'text' | 'number' | 'email' | 'phone' | 'date' | 'datetime' | 'boolean'
 export type WidgetImageFit = 'cover' | 'contain' | 'fill' | 'none'
@@ -243,6 +243,8 @@ export interface WidgetContentConfig {
   format?: string
   title?: string
   visible?: boolean
+  showConfirmButton?: boolean
+  showCancelButton?: boolean
   confirmText?: string
   cancelText?: string
   closeOnOverlay?: boolean

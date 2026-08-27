@@ -514,7 +514,10 @@ function containerStyle() {
       <header><strong>{{ config.content.title || config.content.text || '确认操作' }}</strong><button v-if="runtime" class="service-close" @click="emitEvent('close')"><AppIcon name="close" :size="14" /></button></header>
       <p v-if="config.content.description">{{ config.content.description }}</p>
       <div class="render-container-content"><slot name="children" /></div>
-      <footer><button v-if="config.content.cancelText !== ''" class="modal-cancel" @click="emitEvent('cancel')">{{ config.content.cancelText || '取消' }}</button><button class="modal-confirm" :style="{ background: config.style.accent || '#665cf6' }" @click="emitEvent('confirm')">{{ config.content.confirmText || '确定' }}</button></footer>
+      <footer v-if="config.content.showCancelButton !== false || config.content.showConfirmButton !== false">
+        <button v-if="config.content.showCancelButton !== false" class="modal-cancel" @click="emitEvent('cancel')">{{ config.content.cancelText || '取消' }}</button>
+        <button v-if="config.content.showConfirmButton !== false" class="modal-confirm" :style="{ background: config.style.accent || '#665cf6' }" @click="emitEvent('confirm')">{{ config.content.confirmText || '确定' }}</button>
+      </footer>
     </div>
   </div>
   <div v-else-if="['card', 'frame', 'stack', 'grid'].includes(widget.type)" :class="['render-generic-container', `render-${widget.type}`]" :style="containerStyle()" @click="handleClick">

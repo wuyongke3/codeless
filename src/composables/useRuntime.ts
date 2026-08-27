@@ -63,6 +63,8 @@ function appendNavigationParams(target: string, params: Record<string, unknown>)
 export function useRuntime(options: RuntimeOptions) {
   const runtimeValues = reactive<Record<string, string>>({})
   const serviceVisibility = reactive<Record<string, boolean>>({})
+  // 防止生命周期动作再次打开/关闭同一个服务组件时产生递归调用。
+  const serviceTransitioningIds = new Set<string>()
   const tableSelections = reactive<Record<string, Record<string, unknown>>>({})
   const tableRefreshKeys = reactive<Record<string, number>>({})
 
@@ -240,7 +242,10 @@ export function useRuntime(options: RuntimeOptions) {
     if (action.type === 'showModal' || action.type === 'hideModal') {
       const target = resolveValue(action.target, payload, values)
       const services = [...serviceWidgets('modal', target), ...serviceWidgets('drawer', target)]
-      services.forEach(widget => setServiceVisible(widget.id, action.type === 'showModal'))
+      for (const widget of services) {
+        if (action.type === 'showModal') await openServiceWidget(widget, payload)
+        else await closeServiceWidget(widget, payload)
+      }
       return
     }
     if (action.type === 'showLoading' || action.type === 'hideLoading') {
@@ -248,22 +253,63 @@ export function useRuntime(options: RuntimeOptions) {
     }
   }
 
-  async function executeWidgetEvent(widget: LowCodeWidget, eventType: WidgetEventType, payload: RuntimeEventPayload = {}) {
-    if (eventType === 'rowClick' && widget.type === 'table' && payload.row) selectTableRow(widget.id, payload.row)
-    if (eventType === 'submit' && !validateForm()) return
+  async function executeConfiguredEvents(widget: LowCodeWidget, eventType: WidgetEventType, payload: RuntimeEventPayload = {}) {
     const configuredEvents = getWidgetEvents(widget).filter(event => event.event === eventType && event.enabled !== false)
-    const config = getWidgetConfig(widget)
-
-    // 兼容旧版按钮的 submitTo 配置：只有没有配置任何自定义事件时才走默认提交。
-    if (!configuredEvents.length && !getWidgetEvents(widget).length && eventType === 'submit' && config.submitTo?.table) {
-      await options.submitData(config.submitTo.table, collectFormValues())
-      return
-    }
-
     for (const event of configuredEvents) {
       for (const action of event.actions) await executeAction(action, payload)
     }
-    if ((widget.type === 'modal' || widget.type === 'drawer') && (eventType === 'close' || eventType === 'cancel' || eventType === 'confirm')) setServiceVisible(widget.id, false)
+    return configuredEvents.length
+  }
+
+  async function openServiceWidget(widget: LowCodeWidget, payload: RuntimeEventPayload = {}) {
+    if (isServiceVisible(widget) || serviceTransitioningIds.has(widget.id)) return
+    serviceTransitioningIds.add(widget.id)
+    try {
+      await executeConfiguredEvents(widget, 'beforeOpen', payload)
+      setServiceVisible(widget.id, true)
+      await executeConfiguredEvents(widget, 'open', payload)
+    } finally {
+      serviceTransitioningIds.delete(widget.id)
+    }
+  }
+
+  async function closeServiceWidget(widget: LowCodeWidget, payload: RuntimeEventPayload = {}) {
+    if (!isServiceVisible(widget) || serviceTransitioningIds.has(widget.id)) return
+    serviceTransitioningIds.add(widget.id)
+    try {
+      await executeConfiguredEvents(widget, 'beforeClose', payload)
+      setServiceVisible(widget.id, false)
+      await executeConfiguredEvents(widget, 'close', payload)
+    } finally {
+      serviceTransitioningIds.delete(widget.id)
+    }
+  }
+
+  async function executeWidgetEvent(widget: LowCodeWidget, eventType: WidgetEventType, payload: RuntimeEventPayload = {}) {
+    if (eventType === 'rowClick' && widget.type === 'table' && payload.row) selectTableRow(widget.id, payload.row)
+    if (eventType === 'submit' && !validateForm()) return
+    const isServiceWidget = widget.type === 'modal' || widget.type === 'drawer'
+
+    // 确认/取消是用户意图事件：先执行其绑定动作，再走完整关闭生命周期。
+    if (isServiceWidget && (eventType === 'confirm' || eventType === 'cancel')) {
+      await executeConfiguredEvents(widget, eventType, payload)
+      await closeServiceWidget(widget, payload)
+      return
+    }
+
+    // 点击关闭按钮或遮罩时，只触发完整的关闭生命周期，避免 close 事件递归。
+    if (isServiceWidget && eventType === 'close') {
+      await closeServiceWidget(widget, payload)
+      return
+    }
+
+    const configuredEventCount = await executeConfiguredEvents(widget, eventType, payload)
+    const config = getWidgetConfig(widget)
+
+    // 兼容旧版按钮的 submitTo 配置：只有没有配置任何自定义事件时才走默认提交。
+    if (!configuredEventCount && !getWidgetEvents(widget).length && eventType === 'submit' && config.submitTo?.table) {
+      await options.submitData(config.submitTo.table, collectFormValues())
+    }
   }
 
   return {

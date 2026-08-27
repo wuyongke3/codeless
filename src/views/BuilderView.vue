@@ -104,7 +104,7 @@ function actionTargetPlaceholder(type: string) {
   if (type === 'navigateBack') return 'Return to the previous page'
   if (type === 'setRouteState') return 'State key, e.g. selectedId or shared.userId'
   if (type === 'emitPageEvent') return 'Event name, e.g. customer.updated'
-  if (['showModal', 'hideModal'].includes(type)) return 'Select a modal; leave empty for all'
+  if (['showModal', 'hideModal'].includes(type)) return '选择弹窗；留空将作用于全部弹窗'
   if (['showLoading', 'hideLoading'].includes(type)) return 'Select a loading widget; leave empty for all'
   return '/detail, a page path, or a workspace target'
 }
@@ -365,7 +365,7 @@ onBeforeUnmount(() => {
                   <option v-for="targetWidget in tableActionTargets()" :key="targetWidget.id" :value="targetWidget.id">{{ targetWidget.name }}（{{ targetWidget.config.data.table }}）</option>
                 </select>
                 <select v-else-if="action.type === 'showModal' || action.type === 'hideModal'" class="event-action-target" v-model="action.target" @change="state.markDirty()">
-                  <option value="">全部弹窗</option>
+                  <option value="">全部弹窗（不建议）</option>
                   <option v-for="service in state.currentProject.layout.widgets.filter((item: any) => item.type === 'modal')" :key="service.id" :value="service.id">{{ service.name }}</option>
                 </select>
                 <select v-else-if="action.type === 'showLoading' || action.type === 'hideLoading'" class="event-action-target" v-model="action.target" @change="state.markDirty()">
@@ -386,7 +386,7 @@ onBeforeUnmount(() => {
               </div>
             </div><button class="event-add-action" @click="state.addEventAction(event.id)"><AppIcon name="plus" :size="13" />添加动作</button>
           </article>
-          <div class="events-tip"><AppIcon name="info" :size="13" /><span v-pre>事件支持使用数据模板，例如 {{ row.field }}；表单字段使用 {{ form.field }}。更新、删除前请先点击表格行选中记录。</span></div>
+          <div class="events-tip"><AppIcon name="info" :size="13" /><span v-pre>事件支持使用数据模板，例如 {{ row.field }}；表单字段使用 {{ form.field }}。打开/关闭弹窗会依次触发弹窗自身的打开前/后、关闭前/后事件；更新、删除前请先点击表格行选中记录。</span></div>
         </div>
         <div class="inspector-actions"><button @click="state.duplicateSelectedWidget"><AppIcon name="copy" :size="15" />复制</button><button @click="state.bringToFront"><AppIcon name="layers" :size="15" />置顶</button><button @click="state.toggleSelectedLocked"><AppIcon name="lock" :size="15" />锁定</button><button class="danger" @click="state.removeSelectedWidget"><AppIcon name="trash" :size="15" />删除</button></div>
       </template>
