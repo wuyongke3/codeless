@@ -44,6 +44,8 @@ const modes = computed(() => {
 const selectedTableName = computed(() => binding.value.table || '')
 const selectedField = computed(() => binding.value.field || selectedFieldNames.value[0] || '')
 const selectedColumns = computed(() => selectedFieldNames.value)
+const selectedColumnSet = computed(() => new Set(selectedColumns.value))
+const allColumnsSelected = computed(() => fields.value.length > 0 && selectedColumns.value.length === fields.value.length)
 
 function update(patch: Partial<WidgetDataBinding>) {
   emit('update', { ...binding.value, ...patch })
@@ -110,6 +112,24 @@ function updateColumns(value: string[]) {
   update({ fields: fieldMap(value), field: value[0] || undefined, mode: 'list' })
 }
 
+function toggleColumn(fieldName: string, checked: boolean) {
+  const current = selectedColumns.value
+  const next = checked
+    ? [...current, fieldName]
+    : current.filter(name => name !== fieldName)
+  // 查询至少保留一个字段，避免将“无选择”误解为查询全部字段。
+  if (!next.length) return
+  updateColumns(next)
+}
+
+function selectAllColumns() {
+  updateColumns(fields.value.map(field => field.name))
+}
+
+function resetColumnsToRecommended() {
+  updateColumns(fields.value.slice(0, 6).map(field => field.name))
+}
+
 function clearBinding() {
   emit('update', { source: 'static' })
 }
@@ -125,7 +145,22 @@ function clearBinding() {
       <div class="binding-table-meta"><strong>{{ selectedTable?.title || binding.table }}</strong><span>{{ fields.length }} 个字段</span></div>
       <CSegmented v-if="!isTable && modes.length > 1" :model-value="binding.mode || 'list'" :options="modes" class="binding-mode" aria-label="数据展示模式" @update:model-value="updateMode" />
 
-      <label v-if="isTable" class="binding-field"><span>查询字段</span><CSelect :model-value="selectedColumns" :options="fieldOptions" class="binding-control" multiple placeholder="选择要展示的字段" @update:model-value="updateColumns($event as string[])" /><small>字段顺序会同步到下方「显示列」，可继续修改表头、宽度和对齐方式。</small></label>
+      <div v-if="isTable" class="binding-field binding-query-columns">
+        <div class="binding-field-title"><span>查询字段</span><small>已选 {{ selectedColumns.length }} / {{ fields.length }}</small></div>
+        <div class="binding-field-actions">
+          <CButton size="small" text :disabled="allColumnsSelected" @click="selectAllColumns">全选</CButton>
+          <CButton size="small" text @click="resetColumnsToRecommended">推荐字段</CButton>
+        </div>
+        <div class="binding-column-list" role="group" aria-label="查询字段">
+          <label v-for="field in fields" :key="field.name" :class="['binding-column-option', { selected: selectedColumnSet.has(field.name) }]">
+            <input type="checkbox" :checked="selectedColumnSet.has(field.name)" @change="toggleColumn(field.name, ($event.target as HTMLInputElement).checked)" />
+            <span class="binding-column-check" aria-hidden="true"></span>
+            <span class="binding-column-content"><strong>{{ field.description || field.name }}</strong><small>{{ field.name }} · {{ field.type }}</small></span>
+            <CTag v-if="field.isPrimaryKey" type="default">主键</CTag>
+          </label>
+        </div>
+        <small>勾选字段将决定数据查询及表格显示顺序；表头、宽度和对齐可在下方「显示列」继续调整。</small>
+      </div>
       <label v-else-if="!isSelect && binding.mode !== 'count' && binding.mode !== 'aggregate'" class="binding-field"><span>显示字段</span><CSelect :model-value="selectedField" :options="fieldOptions" class="binding-control" placeholder="选择显示字段" @update:model-value="updateSingleField" /></label>
 
       <div v-if="isSelect" class="binding-two-columns"><label class="binding-field"><span>显示字段</span><CSelect :model-value="binding.labelField || ''" :options="simpleFieldOptions" placeholder="显示字段" @update:model-value="update({ labelField: selectValue($event) })" /></label><label class="binding-field"><span>值字段</span><CSelect :model-value="binding.valueField || ''" :options="simpleFieldOptions" placeholder="值字段" @update:model-value="update({ valueField: selectValue($event) })" /></label></div>
